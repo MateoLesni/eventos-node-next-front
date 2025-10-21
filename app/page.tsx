@@ -15,7 +15,7 @@ export default function Home() {
   const [clientesData, setClientesData] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(false)
 
-  // 1) Traer clientes
+  // 1) Traer clientes (ya incluye observacionesList desde el backend)
   useEffect(() => {
     async function fetchClientes() {
       try {
@@ -33,27 +33,9 @@ export default function Home() {
     fetchClientes()
   }, [])
 
-  // 2) Al seleccionar, traer observaciones del cliente y setearlas en el objeto seleccionado
-  const handleSelectCliente = async (cliente: Cliente) => {
-    try {
-      const res = await fetch(`${API_BASE}/api/eventSheet/${cliente.id}/observaciones`)
-      const json = await res.json()
-      const arr: string[] = Array.isArray(json.data) ? json.data : []
-
-      // Mapear string[] → Observacion[]
-      const obs: Observacion[] = arr.map((texto, idx) => ({
-        id: `obs-${idx}-${cliente.id}`,
-        fecha: "",           // por ahora no viene del backend; si luego lo agregas, lo mapeamos acá
-        texto,
-        autor: "Sistema",    // placeholder
-      }))
-
-      setSelectedCliente({ ...cliente, observaciones: obs })
-    } catch (e) {
-      console.error("No se pudieron cargar observaciones:", e)
-      // igual mostramos el cliente, con observaciones vacías si falla
-      setSelectedCliente({ ...cliente, observaciones: [] })
-    }
+  // 2) Al seleccionar, ya tenemos observaciones en el cliente — no hace falta fetch extra
+  const handleSelectCliente = (cliente: Cliente) => {
+    setSelectedCliente(cliente)
   }
 
   return (
@@ -95,12 +77,16 @@ export default function Home() {
 
 function mapClientes(data: any[]): Cliente[] {
   return data.map((item) => {
-    const observacion: Observacion = {
-      id: item.id,
-      fecha: item.fechaCliente || "",
-      texto: item.observacion || "",
-      autor: item.vendedorComercialAsignado || "Sistema",
-    }
+    // normalizamos observacionesList
+    const observacionesList = Array.isArray(item.observacionesList)
+      ? item.observacionesList.map((o: any) => {
+          if (typeof o === "string") return { texto: o, fecha: "" }
+          return {
+            texto: typeof o?.texto === "string" ? o.texto : "",
+            fecha: typeof o?.fecha === "string" ? o.fecha : "",
+          }
+        }).filter((o: any) => o.texto)
+      : []
 
     return {
       id: item.id,
@@ -112,7 +98,11 @@ function mapClientes(data: any[]): Cliente[] {
       lugar: item.lugar || "",
       cantidadPersonas: Number(item.cantidadPersonas) || 0,
       observacion: item.observacion || "",
-      observaciones: [observacion], // valor inicial; se sobrescribe al seleccionar
+      // ⚠️ antes metías una sola observación “base” acá; ya no hace falta
+      observaciones: [], // o eliminá este campo si ya no se usa
+      // 👇 preservamos lo que viene del back (lo usa el detalle)
+      observacionesList,
+
       redireccion: item.redireccion || "",
       canal: item.canal || "",
       respuestaViaMail: item.respuestaViaMail || "",
@@ -130,3 +120,4 @@ function mapClientes(data: any[]): Cliente[] {
     }
   })
 }
+

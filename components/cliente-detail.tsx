@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { Cliente } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -23,43 +23,51 @@ import {
   MessageSquare,
 } from "lucide-react"
 
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  "https://eventos-node-express-back.vercel.app"
+
+type ObsItem = { texto: string; fecha: string }
+
 interface ClienteDetailProps {
   cliente: Cliente
   onBack: () => void
 }
 
+// --- helper para normalizar cualquier cosa a ObsItem ---
+function normalizeObservaciones(input: unknown): ObsItem[] {
+  if (!Array.isArray(input)) return []
+  return input
+    .map((o: any) => {
+      if (typeof o === "string") return { texto: o, fecha: "" }
+      const texto = typeof o?.texto === "string" ? o.texto : (typeof o === "string" ? o : "")
+      const fecha = typeof o?.fecha === "string" ? o.fecha : ""
+      return { texto: String(texto ?? ""), fecha: String(fecha ?? "") }
+    })
+    .filter((o) => o.texto && typeof o.texto === "string")
+}
+
 export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
   const [newObservacion, setNewObservacion] = useState("")
-  // Observaciones ahora vienen del backend como string[]
-  const [observaciones, setObservaciones] = useState<string[]>([])
-  const [obsLoading, setObsLoading] = useState(false)
   const [obsSaving, setObsSaving] = useState(false)
 
-  // Cargar observaciones del backend (más reciente arriba)
+  // 1) Tomamos observaciones del cliente y las normalizamos
+  const initialObservaciones: ObsItem[] = useMemo(() => {
+    const fromList = (cliente as any)?.observacionesList
+    if (Array.isArray(fromList)) return normalizeObservaciones(fromList)
+
+    // fallback por si existiera aún `cliente.observaciones`
+    const legacy = (cliente as any)?.observaciones
+    if (Array.isArray(legacy)) return normalizeObservaciones(legacy)
+
+    return []
+  }, [cliente])
+
+  const [observaciones, setObservaciones] = useState<ObsItem[]>(initialObservaciones)
+
   useEffect(() => {
-    let abort = false
-    const load = async () => {
-      try {
-        setObsLoading(true)
-        const res = await fetch(`/api/eventSheet/${cliente.id}/observaciones`)
-        const json = await res.json()
-        if (!abort && res.ok) {
-          setObservaciones(Array.isArray(json.data) ? json.data : [])
-        } else if (!abort) {
-          setObservaciones([])
-        }
-      } catch (e) {
-        console.error("Error cargando observaciones:", e)
-        if (!abort) setObservaciones([])
-      } finally {
-        if (!abort) setObsLoading(false)
-      }
-    }
-    if (cliente?.id) load()
-    return () => {
-      abort = true
-    }
-  }, [cliente?.id])
+    setObservaciones(initialObservaciones)
+  }, [initialObservaciones])
 
   const getEstadoBadgeVariant = (estado: Cliente["estado"]) => {
     switch (estado) {
@@ -76,36 +84,42 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
     }
   }
 
-  // Guardar observación en Sheets (columna ObservacionN libre)
+  const nowAR = () => {
+    try {
+      return new Intl.DateTimeFormat("es-AR", {
+        timeZone: "America/Argentina/Buenos_Aires",
+        dateStyle: "short",
+        timeStyle: "short",
+      }).format(new Date())
+    } catch {
+      return new Date().toISOString()
+    }
+  }
+
+  // Guardar observación en Sheets (columna ObservacionN libre) + fecha en FechaObsN
   const handleAddObservacion = async () => {
     const texto = newObservacion.trim()
     if (!texto) return
 
     setObsSaving(true)
+    const fecha = nowAR()
 
-    // Actualización optimista: insertar arriba
-    setObservaciones((prev) => [texto, ...prev])
+    // Optimista: insertar arriba
+    setObservaciones((prev) => [{ texto, fecha }, ...prev])
     setNewObservacion("")
 
     try {
-      const res = await fetch(`/api/eventSheet/${cliente.id}/observaciones`, {
+      const res = await fetch(`${API_BASE}/api/eventSheet/${cliente.id}/observaciones`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ texto }),
       })
 
       if (!res.ok) {
-        // Revertir si falla
-        setObservaciones((prev) => prev.filter((t) => t !== texto))
+        // revert si falla
+        setObservaciones((prev) => prev.filter((o) => !(o.texto === texto && o.fecha === fecha)))
         const errJson = await res.json().catch(() => ({}))
-        throw new Error(errJson?.error || "No se pudo guardar la observación")
-      }
-
-      // Refetch para asegurar consistencia con el backend
-      const ref = await fetch(`/api/eventSheet/${cliente.id}/observaciones`)
-      const j = await ref.json()
-      if (ref.ok && Array.isArray(j.data)) {
-        setObservaciones(j.data)
+        throw new Error(errJson?.message || errJson?.error || "No se pudo guardar la observación")
       }
     } catch (e: any) {
       console.error(e)
@@ -294,31 +308,27 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Lista de observaciones desde el backend */}
           <div className="space-y-3">
-            {obsLoading ? (
-              <p className="text-sm text-muted-foreground">Cargando...</p>
-            ) : observaciones.length === 0 ? (
+            {observaciones.length === 0 ? (
               <p className="text-sm text-muted-foreground">Sin observaciones</p>
             ) : (
-              observaciones.map((texto, i) => (
-                <div key={`${i}-${texto.slice(0, 10)}`} className="border-l-2 border-primary pl-4 py-2">
-                  <div className="flex items-center justify-between mb-1">
-                    {/* Por ahora no hay fecha/autor: mostramos placeholders */}
-                    <p className="text-xs text-muted-foreground">—</p>
-                    <Badge variant="outline" className="text-xs">
-                      Sistema
-                    </Badge>
+              observaciones.map((o, i) => {
+                const safeKey = `${i}-${(typeof o?.texto === "string" ? o.texto : "").slice(0, 10)}`
+                return (
+                  <div key={safeKey} className="border-l-2 border-primary pl-4 py-2">
+                    <div className="flex items-center justify-between mb-1">
+                      <p className="text-xs text-muted-foreground">{o?.fecha || "—"}</p>
+                      <Badge variant="outline" className="text-xs">Sistema</Badge>
+                    </div>
+                    <p className="text-sm leading-relaxed">{o?.texto}</p>
                   </div>
-                  <p className="text-sm leading-relaxed">{texto}</p>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
 
           <Separator />
 
-          {/* Form para añadir nueva observación */}
           <div className="space-y-3">
             <Label htmlFor="nueva-observacion">Añadir Nueva Observación</Label>
             <Textarea
