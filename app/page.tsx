@@ -84,7 +84,7 @@ function mapClientes(data: any[]): Cliente[] {
       presupuesto: item.presupuesto || '',
       fechaPresupEnviado: item.fechaPresupEnviado || '',
       // se traduce el estado original
-      estado: item.estado === 'ASIGNADO' ? 'Activo' : 'Pendiente',
+      estado: item.estado || 'N/A',
     }
   })
 }
