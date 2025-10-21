@@ -277,8 +277,8 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
               <p className="text-sm text-muted-foreground">{cliente.canal}</p>
             </div>
             <div>
-              <p className="text-sm font-medium mb-1">Redirección</p>
-              <p className="text-sm text-muted-foreground">{cliente.redireccion}</p>
+              <p className="text-sm font-medium mb-1">Mensaje del Cliente</p>
+              <p className="text-sm text-muted-foreground">{cliente.observacion}</p>
             </div>
             <div>
               <p className="text-sm font-medium mb-1">Respuesta vía Mail</p>
