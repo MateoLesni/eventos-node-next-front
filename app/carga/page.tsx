@@ -35,6 +35,20 @@ export default function CargaPage() {
         vendedor: "",
         observaciones: "",
       })
+      fetch('https://eventos-node-express-back.vercel.app/api/eventSheet', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      })
+      .then(response => response.json())
+      .then(data => {
+        console.log('Success:', data);
+      })
+      .catch((error) => {
+        console.error('Error:', error);
+      });
     }, 3000)
   }
 

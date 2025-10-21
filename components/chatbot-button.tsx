@@ -10,7 +10,7 @@ export function ChatbotButton() {
   const handleClick = () => {
     if (!isOpen) {
       window.open(
-        "https://vps-5138181-x.dattaweb.com/webhook/9f7d179d-26f8-4dc8-a38a-84487635c9ae/chat",
+        "https://vps-5138181-x.dattaweb.com/webhook/51c861b7-7dd8-4b23-863a-33541d96f202/chat",
         "Bot NG",
         "width=400,height=600,resizable=yes,scrollbars=yes",
       )
