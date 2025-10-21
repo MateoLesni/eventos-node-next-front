@@ -16,7 +16,7 @@ export function Navbar() {
             <div className="flex items-center justify-center size-10 rounded-lg bg-primary text-primary-foreground">
               <Building2 className="size-5" />
             </div>
-            <span className="text-xl font-semibold">CRM Sistema</span>
+            <span className="text-xl font-semibold">CRM NG</span>
           </Link>
 
           <div className="flex items-center gap-4">
