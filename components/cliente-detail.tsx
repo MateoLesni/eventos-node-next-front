@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { useRouter } from "next/navigation"
 import type { Cliente } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -21,6 +22,7 @@ import {
   User,
   Plus,
   MessageSquare,
+  UploadCloud,
 } from "lucide-react"
 
 const API_BASE =
@@ -48,6 +50,8 @@ function normalizeObservaciones(input: unknown): ObsItem[] {
 }
 
 export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
+  const router = useRouter()
+
   const [newObservacion, setNewObservacion] = useState("")
   const [obsSaving, setObsSaving] = useState(false)
 
@@ -96,6 +100,11 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
     }
   }
 
+  // Navegar al formulario de carga con el ID preseleccionado
+  const goToCarga = () => {
+    router.push(`/carga?id=${encodeURIComponent(cliente.id)}`)
+  }
+
   // Guardar observación en Sheets (columna ObservacionN libre) + fecha en FechaObsN
   const handleAddObservacion = async () => {
     const texto = newObservacion.trim()
@@ -141,9 +150,18 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
             <p className="text-sm text-muted-foreground">ID: {cliente.id}</p>
           </div>
         </div>
-        <Badge variant={getEstadoBadgeVariant(cliente.estado)} className="text-sm px-3 py-1">
-          {cliente.estado}
-        </Badge>
+
+        <div className="flex items-center gap-2">
+          <Badge variant={getEstadoBadgeVariant(cliente.estado)} className="text-sm px-3 py-1">
+            {cliente.estado}
+          </Badge>
+
+          {/* Botón NUEVO: Cargar datos */}
+          <Button onClick={goToCarga} className="ml-2">
+            <UploadCloud className="mr-2 size-4" />
+            Cargar datos
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
