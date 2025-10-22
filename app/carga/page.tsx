@@ -1,12 +1,14 @@
 "use client"
 
-import React, { useEffect, useMemo, useState } from "react"
+import React, { Suspense, useEffect, useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { FileText, CheckCircle2 } from "lucide-react"
+
+export const dynamic = "force-dynamic" // evita SSG/ISR; necesario con useSearchParams
 
 type SheetEvent = {
   id: string
@@ -21,7 +23,7 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ||
   "https://eventos-node-express-back.vercel.app"
 
-export default function CargaPage() {
+function CargaPageInner() {
   const search = useSearchParams()
   const idFromQuery = search.get("id") ?? ""
 
@@ -41,7 +43,6 @@ export default function CargaPage() {
   const [loadingId, setLoadingId] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // qué campos están bloqueados (porque ya tenían dato en el sheet)
   const locked = useMemo(() => {
     const o = originalData
     return {
@@ -53,7 +54,6 @@ export default function CargaPage() {
     }
   }, [originalData])
 
-  // Si viene el id por query param, intento cargar
   useEffect(() => {
     if (idFromQuery) {
       setIdCliente(idFromQuery)
@@ -62,9 +62,7 @@ export default function CargaPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idFromQuery])
 
-  // --- helpers ---
   function onlyHHmm(s: string) {
-    // Acepta "16:30" y normaliza, para evitar valores raros.
     const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(s.trim())
     return m ? `${m[1]}:${m[2]}` : ""
   }
@@ -117,22 +115,19 @@ export default function CargaPage() {
     }
   }
 
-  // Cuando salís del input de ID, intenta cargar
   const onBlurId = () => {
     if (idCliente.trim()) {
       void fetchById(idCliente)
     }
   }
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({
       ...prev,
       [name]:
         name === "horarioInicioEvento" || name === "horarioFinalizacionEvento"
-          ? value // el <input type="time" /> ya da HH:mm
+          ? value
           : value,
     }))
   }
@@ -146,36 +141,25 @@ export default function CargaPage() {
       setErrorMsg("Debes ingresar el ID Cliente")
       return
     }
-
     if (!originalData) {
       setErrorMsg("Primero busca un cliente válido por ID")
       return
     }
 
-    // Construimos el payload SOLO con los campos que estaban vacíos y que ahora tienen valor
     const payload: Record<string, string> = {}
 
-    // Horario Inicio
     if (!originalData.horarioInicioEvento && formData.horarioInicioEvento) {
       payload.horarioInicioEvento = onlyHHmm(formData.horarioInicioEvento)
     }
-
-    // Horario Finalización
     if (!originalData.horarioFinalizacionEvento && formData.horarioFinalizacionEvento) {
       payload.horarioFinalizacionEvento = onlyHHmm(formData.horarioFinalizacionEvento)
     }
-
-    // Sector
     if (!originalData.sector && formData.sector.trim()) {
       payload.sector = formData.sector.trim()
     }
-
-    // Comercial Asignado
     if (!originalData.vendedorComercialAsignado && formData.vendedorComercialAsignado.trim()) {
       payload.vendedorComercialAsignado = formData.vendedorComercialAsignado.trim()
     }
-
-    // Presupuesto
     if (!originalData.presupuesto && formData.presupuesto.trim()) {
       payload.presupuesto = formData.presupuesto.trim()
     }
@@ -184,11 +168,6 @@ export default function CargaPage() {
       setErrorMsg("No hay campos nuevos para agregar (todos ya tienen datos).")
       return
     }
-
-    // IMPORTANTe: el backend debe poner los timestamps:
-    // - Si se envía horarioInicioEvento o horarioFinalizacionEvento => setear "marcaTemporal" (col S)
-    // - Si se envía "presupuesto" => setear "fechaPresupEnviado" (col V)
-    // Si todavía no lo hace, avisame y te paso el cambio en el service.
 
     try {
       const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(cleanId)}`, {
@@ -203,11 +182,8 @@ export default function CargaPage() {
       }
 
       setSubmitted(true)
-
-      // reset “visual” después del OK (y recargar desde sheet por si querés)
       setTimeout(() => {
         setSubmitted(false)
-        // Volvemos a leer para dejar todo bloqueado
         void fetchById(cleanId)
       }, 2000)
     } catch (e: any) {
@@ -271,16 +247,11 @@ export default function CargaPage() {
                   placeholder="Ej: 1"
                   required
                 />
-                {loadingId && (
-                  <p className="text-xs text-muted-foreground">Buscando cliente...</p>
-                )}
-                {errorMsg && (
-                  <p className="text-xs text-red-600">{errorMsg}</p>
-                )}
+                {loadingId && <p className="text-xs text-muted-foreground">Buscando cliente...</p>}
+                {errorMsg && <p className="text-xs text-red-600">{errorMsg}</p>}
               </div>
 
               <div className="grid gap-6 md:grid-cols-2">
-                {/* Horario Inicio Evento (col N) */}
                 <div className="space-y-2">
                   <Label htmlFor="horarioInicioEvento">Horario Inicio Evento</Label>
                   <Input
@@ -296,7 +267,6 @@ export default function CargaPage() {
                   )}
                 </div>
 
-                {/* Horario Finalización Evento (col O) */}
                 <div className="space-y-2">
                   <Label htmlFor="horarioFinalizacionEvento">Horario Finalización Evento</Label>
                   <Input
@@ -313,7 +283,6 @@ export default function CargaPage() {
                 </div>
               </div>
 
-              {/* Sector (col Q) */}
               <div className="space-y-2">
                 <Label htmlFor="sector">Sector</Label>
                 <Input
@@ -324,12 +293,9 @@ export default function CargaPage() {
                   placeholder="Ej: Corporativo, Social, Cultural"
                   disabled={locked.sector}
                 />
-                {locked.sector && (
-                  <p className="text-xs text-muted-foreground">Este dato ya existe y no puede editarse.</p>
-                )}
+                {locked.sector && <p className="text-xs text-muted-foreground">Este dato ya existe y no puede editarse.</p>}
               </div>
 
-              {/* Comercial Asignado (col R) */}
               <div className="space-y-2">
                 <Label htmlFor="vendedorComercialAsignado">Comercial Asignado</Label>
                 <Input
@@ -345,7 +311,6 @@ export default function CargaPage() {
                 )}
               </div>
 
-              {/* Presupuesto (col U) */}
               <div className="space-y-2">
                 <Label htmlFor="presupuesto">Presupuesto</Label>
                 <Input
@@ -375,5 +340,13 @@ export default function CargaPage() {
         </Card>
       </div>
     </div>
+  )
+}
+
+export default function CargaPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-sm text-muted-foreground">Cargando formulario…</div>}>
+      <CargaPageInner />
+    </Suspense>
   )
 }
