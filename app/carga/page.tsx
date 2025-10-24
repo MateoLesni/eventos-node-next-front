@@ -5,10 +5,11 @@ import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { FileText, CheckCircle2 } from "lucide-react"
 
-export const dynamic = "force-dynamic" // evita SSG/ISR; necesario con useSearchParams
+export const dynamic = "force-dynamic"
 
 type SheetEvent = {
   id: string
@@ -28,7 +29,6 @@ function CargaPageInner() {
   const search = useSearchParams()
   const idFromQuery = search.get("id") ?? ""
 
-  // --- estado del formulario ---
   const [submitted, setSubmitted] = useState(false)
   const [idCliente, setIdCliente] = useState(idFromQuery)
   const [formData, setFormData] = useState({
@@ -39,14 +39,17 @@ function CargaPageInner() {
     presupuesto: "",
   })
 
-  // Guarda lo que vino originalmente del sheet para poder bloquear
   const [originalData, setOriginalData] = useState<SheetEvent | null>(null)
   const [loadingId, setLoadingId] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // estado de “Estado”
+  // Estado (W) + rechazo UI
   const [estado, setEstado] = useState<string>("")
   const [estadoSaving, setEstadoSaving] = useState(false)
+  const [showRechazoInput, setShowRechazoInput] = useState(false)
+  const [rechazoMotivo, setRechazoMotivo] = useState("")
+  const [rechazoSaving, setRechazoSaving] = useState(false)
+  const [estadoPrevio, setEstadoPrevio] = useState<string>("")
 
   const locked = useMemo(() => {
     const o = originalData
@@ -81,10 +84,7 @@ function CargaPageInner() {
     try {
       const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(cleanId)}`)
       const json = await res.json()
-
-      if (!res.ok || !json?.data) {
-        throw new Error(json?.message || "No se encontró el cliente")
-      }
+      if (!res.ok || !json?.data) throw new Error(json?.message || "No se encontró el cliente")
 
       const ev = json.data as any
       const payload: SheetEvent = {
@@ -106,6 +106,9 @@ function CargaPageInner() {
         presupuesto: payload.presupuesto,
       })
       setEstado(payload.estado || "")
+      setEstadoPrevio(payload.estado || "")
+      setShowRechazoInput(false)
+      setRechazoMotivo("")
     } catch (e: any) {
       console.error(e)
       setOriginalData(null)
@@ -117,6 +120,7 @@ function CargaPageInner() {
         presupuesto: "",
       })
       setEstado("")
+      setEstadoPrevio("")
       setErrorMsg(e?.message || "Error al buscar el cliente")
     } finally {
       setLoadingId(false)
@@ -124,19 +128,14 @@ function CargaPageInner() {
   }
 
   const onBlurId = () => {
-    if (idCliente.trim()) {
-      void fetchById(idCliente)
-    }
+    if (idCliente.trim()) void fetchById(idCliente)
   }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({
       ...prev,
-      [name]:
-        name === "horarioInicioEvento" || name === "horarioFinalizacionEvento"
-          ? value
-          : value,
+      [name]: (name === "horarioInicioEvento" || name === "horarioFinalizacionEvento") ? value : value,
     }))
   }
 
@@ -145,17 +144,10 @@ function CargaPageInner() {
     setErrorMsg(null)
 
     const cleanId = idCliente.trim()
-    if (!cleanId) {
-      setErrorMsg("Debes ingresar el ID Cliente")
-      return
-    }
-    if (!originalData) {
-      setErrorMsg("Primero busca un cliente válido por ID")
-      return
-    }
+    if (!cleanId) return setErrorMsg("Debes ingresar el ID Cliente")
+    if (!originalData) return setErrorMsg("Primero busca un cliente válido por ID")
 
     const payload: Record<string, string> = {}
-
     if (!originalData.horarioInicioEvento && formData.horarioInicioEvento) {
       payload.horarioInicioEvento = onlyHHmm(formData.horarioInicioEvento)
     }
@@ -184,46 +176,83 @@ function CargaPageInner() {
         body: JSON.stringify(payload),
       })
       const json = await res.json()
-
-      if (!res.ok) {
-        throw new Error(json?.message || "No se pudo guardar")
-      }
+      if (!res.ok) throw new Error(json?.message || "No se pudo guardar")
 
       setSubmitted(true)
       setTimeout(() => {
         setSubmitted(false)
         void fetchById(cleanId)
-      }, 2000)
+      }, 1500)
     } catch (e: any) {
       console.error(e)
       setErrorMsg(e?.message || "Error al guardar")
     }
   }
 
-  // --- APROBADO / RECHAZADO ---
+  // Estado: Aprobado / Rechazado
   const isFinal = ["APROBADO", "RECHAZADO"].includes((estado || "").toUpperCase())
-  const updateEstado = async (nuevo: "APROBADO" | "RECHAZADO") => {
-    const cleanId = idCliente.trim()
-    if (!cleanId || isFinal) return
 
+  const clickAprobado = async () => {
+    if (!idCliente.trim() || !originalData) return
+    if (isFinal || showRechazoInput) return
     setEstadoSaving(true)
     try {
-      const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(cleanId)}`, {
+      const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(idCliente.trim())}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ estado: nuevo }),
+        body: JSON.stringify({ estado: "APROBADO" }),
       })
       const j = await res.json()
       if (!res.ok) throw new Error(j?.message || "No se pudo actualizar el estado")
-
-      setEstado(nuevo)
-      // refresco datos base para bloquear correctamente si volvés a escribir
-      void fetchById(cleanId)
+      setEstado("APROBADO")
     } catch (e: any) {
       console.error(e)
       setErrorMsg(e?.message || "Error al actualizar estado")
     } finally {
       setEstadoSaving(false)
+    }
+  }
+
+  const clickRechazado = () => {
+    if (!idCliente.trim() || !originalData) {
+      setErrorMsg("Primero buscá un cliente válido por ID")
+      return
+    }
+    setEstadoPrevio(estado)
+    setEstado("RECHAZADO")
+    setShowRechazoInput(true)
+  }
+
+  const cancelarRechazo = () => {
+    setShowRechazoInput(false)
+    setRechazoMotivo("")
+    setEstado(estadoPrevio)
+  }
+
+  const confirmarRechazo = async () => {
+    const motivo = rechazoMotivo.trim()
+    if (!motivo) {
+      setErrorMsg("Debes ingresar el motivo del rechazo.")
+      return
+    }
+    setRechazoSaving(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(idCliente.trim())}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estado: "RECHAZADO", rechazoMotivo: motivo }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j?.message || "No se pudo actualizar el estado/motivo")
+      setShowRechazoInput(false)
+      setRechazoMotivo("")
+      setEstado("RECHAZADO")
+    } catch (e: any) {
+      console.error(e)
+      setErrorMsg(e?.message || "Error al guardar rechazo")
+      cancelarRechazo()
+    } finally {
+      setRechazoSaving(false)
     }
   }
 
@@ -238,9 +267,7 @@ function CargaPageInner() {
               </div>
               <div>
                 <h2 className="text-2xl font-bold mb-2">Datos Enviados</h2>
-                <p className="text-muted-foreground">
-                  La información ha sido registrada correctamente en el sistema.
-                </p>
+                <p className="text-muted-foreground">La información ha sido registrada correctamente.</p>
               </div>
             </div>
           </CardContent>
@@ -261,16 +288,59 @@ function CargaPageInner() {
               <div>
                 <CardTitle className="text-2xl">Formulario de Carga</CardTitle>
                 <CardDescription>
-                  Ingresá el <strong>ID Cliente</strong>. Si el cliente existe, se completan los campos.
-                  Sólo podrás agregar datos en los campos vacíos.
+                  Ingresá el <strong>ID Cliente</strong>. Si existe, se completan los campos. Sólo podrás agregar en los campos vacíos.
                 </CardDescription>
               </div>
             </div>
           </CardHeader>
 
           <CardContent>
+            {/* Estado + acciones */}
+            <div className="flex items-center gap-2 mb-6">
+              <Button
+                variant={(estado || "").toUpperCase() === "APROBADO" ? "default" : "outline"}
+                disabled={estadoSaving || isFinal || showRechazoInput}
+                onClick={clickAprobado}
+              >
+                Aprobado
+              </Button>
+              <Button
+                variant={(estado || "").toUpperCase() === "RECHAZADO" ? "destructive" : "outline"}
+                disabled={estadoSaving || isFinal}
+                onClick={clickRechazado}
+              >
+                Rechazado
+              </Button>
+              <span className="text-sm text-muted-foreground ml-2">Estado actual: <strong>{estado || "—"}</strong></span>
+            </div>
+
+            {showRechazoInput && (
+              <div className="mb-6 border rounded-md p-4">
+                <Label htmlFor="motivo-rechazo" className="text-destructive">Motivo del Rechazo</Label>
+                <Textarea
+                  id="motivo-rechazo"
+                  value={rechazoMotivo}
+                  onChange={(e) => setRechazoMotivo(e.target.value)}
+                  placeholder="Ej: Cliente canceló por presupuesto / fecha / etc."
+                  rows={3}
+                  className="resize-none mt-2"
+                />
+                <div className="flex gap-3 mt-3">
+                  <Button
+                    onClick={confirmarRechazo}
+                    disabled={!rechazoMotivo.trim() || rechazoSaving}
+                    variant="destructive"
+                  >
+                    {rechazoSaving ? "Guardando..." : "Confirmar rechazo"}
+                  </Button>
+                  <Button variant="outline" onClick={cancelarRechazo} disabled={rechazoSaving}>
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* ID Cliente */}
               <div className="space-y-2">
                 <Label htmlFor="idCliente">ID Cliente</Label>
                 <Input
@@ -286,29 +356,6 @@ function CargaPageInner() {
                 {errorMsg && <p className="text-xs text-red-600">{errorMsg}</p>}
               </div>
 
-              {/* Controles de estado */}
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant={(estado || "").toUpperCase() === "APROBADO" ? "default" : "outline"}
-                  disabled={!idCliente.trim() || estadoSaving || isFinal}
-                  onClick={() => updateEstado("APROBADO")}
-                >
-                  Aprobado
-                </Button>
-                <Button
-                  type="button"
-                  variant={(estado || "").toUpperCase() === "RECHAZADO" ? "destructive" : "outline"}
-                  disabled={!idCliente.trim() || estadoSaving || isFinal}
-                  onClick={() => updateEstado("RECHAZADO")}
-                >
-                  Rechazado
-                </Button>
-                {estado && (
-                  <span className="ml-2 text-sm text-muted-foreground">Estado actual: <strong>{estado}</strong></span>
-                )}
-              </div>
-
               <div className="grid gap-6 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="horarioInicioEvento">Horario Inicio Evento</Label>
@@ -320,9 +367,7 @@ function CargaPageInner() {
                     onChange={handleChange}
                     disabled={locked.horarioInicioEvento}
                   />
-                  {locked.horarioInicioEvento && (
-                    <p className="text-xs text-muted-foreground">Este dato ya existe y no puede editarse.</p>
-                  )}
+                  {locked.horarioInicioEvento && <p className="text-xs text-muted-foreground">Este dato ya existe y no puede editarse.</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -335,9 +380,7 @@ function CargaPageInner() {
                     onChange={handleChange}
                     disabled={locked.horarioFinalizacionEvento}
                   />
-                  {locked.horarioFinalizacionEvento && (
-                    <p className="text-xs text-muted-foreground">Este dato ya existe y no puede editarse.</p>
-                  )}
+                  {locked.horarioFinalizacionEvento && <p className="text-xs text-muted-foreground">Este dato ya existe y no puede editarse.</p>}
                 </div>
               </div>
 
@@ -364,9 +407,7 @@ function CargaPageInner() {
                   placeholder="Nombre del comercial"
                   disabled={locked.vendedorComercialAsignado}
                 />
-                {locked.vendedorComercialAsignado && (
-                  <p className="text-xs text-muted-foreground">Este dato ya existe y no puede editarse.</p>
-                )}
+                {locked.vendedorComercialAsignado && <p className="text-xs text-muted-foreground">Este dato ya existe y no puede editarse.</p>}
               </div>
 
               <div className="space-y-2">
@@ -379,9 +420,7 @@ function CargaPageInner() {
                   placeholder="Monto / referencia"
                   disabled={locked.presupuesto}
                 />
-                {locked.presupuesto && (
-                  <p className="text-xs text-muted-foreground">Este dato ya existe y no puede editarse.</p>
-                )}
+                {locked.presupuesto && <p className="text-xs text-muted-foreground">Este dato ya existe y no puede editarse.</p>}
               </div>
 
               <Button type="submit" className="w-full" size="lg">
@@ -389,9 +428,8 @@ function CargaPageInner() {
               </Button>
 
               <p className="text-xs text-muted-foreground mt-2">
-                Al guardar: si cargás horarios, el sistema registra automáticamente la
-                <strong> marca temporal</strong> (columna S). Si cargás presupuesto, registra la
-                <strong> fecha de envío del presupuesto</strong> (columna V).
+                Al guardar: si cargás horarios, se registra la <strong>marca temporal</strong> (columna S).
+                Si cargás presupuesto, se registra la <strong>fecha de envío del presupuesto</strong> (columna V).
               </p>
             </form>
           </CardContent>
