@@ -17,6 +17,7 @@ type SheetEvent = {
   sector: string
   vendedorComercialAsignado: string
   presupuesto: string
+  estado?: string
 }
 
 const API_BASE =
@@ -42,6 +43,10 @@ function CargaPageInner() {
   const [originalData, setOriginalData] = useState<SheetEvent | null>(null)
   const [loadingId, setLoadingId] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  // estado de “Estado”
+  const [estado, setEstado] = useState<string>("")
+  const [estadoSaving, setEstadoSaving] = useState(false)
 
   const locked = useMemo(() => {
     const o = originalData
@@ -89,6 +94,7 @@ function CargaPageInner() {
         sector: ev.sector || "",
         vendedorComercialAsignado: ev.vendedorComercialAsignado || "",
         presupuesto: ev.presupuesto || "",
+        estado: ev.estado || "",
       }
 
       setOriginalData(payload)
@@ -99,6 +105,7 @@ function CargaPageInner() {
         vendedorComercialAsignado: payload.vendedorComercialAsignado,
         presupuesto: payload.presupuesto,
       })
+      setEstado(payload.estado || "")
     } catch (e: any) {
       console.error(e)
       setOriginalData(null)
@@ -109,6 +116,7 @@ function CargaPageInner() {
         vendedorComercialAsignado: "",
         presupuesto: "",
       })
+      setEstado("")
       setErrorMsg(e?.message || "Error al buscar el cliente")
     } finally {
       setLoadingId(false)
@@ -192,6 +200,33 @@ function CargaPageInner() {
     }
   }
 
+  // --- APROBADO / RECHAZADO ---
+  const isFinal = ["APROBADO", "RECHAZADO"].includes((estado || "").toUpperCase())
+  const updateEstado = async (nuevo: "APROBADO" | "RECHAZADO") => {
+    const cleanId = idCliente.trim()
+    if (!cleanId || isFinal) return
+
+    setEstadoSaving(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(cleanId)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estado: nuevo }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j?.message || "No se pudo actualizar el estado")
+
+      setEstado(nuevo)
+      // refresco datos base para bloquear correctamente si volvés a escribir
+      void fetchById(cleanId)
+    } catch (e: any) {
+      console.error(e)
+      setErrorMsg(e?.message || "Error al actualizar estado")
+    } finally {
+      setEstadoSaving(false)
+    }
+  }
+
   if (submitted) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-background">
@@ -249,6 +284,29 @@ function CargaPageInner() {
                 />
                 {loadingId && <p className="text-xs text-muted-foreground">Buscando cliente...</p>}
                 {errorMsg && <p className="text-xs text-red-600">{errorMsg}</p>}
+              </div>
+
+              {/* Controles de estado */}
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant={(estado || "").toUpperCase() === "APROBADO" ? "default" : "outline"}
+                  disabled={!idCliente.trim() || estadoSaving || isFinal}
+                  onClick={() => updateEstado("APROBADO")}
+                >
+                  Aprobado
+                </Button>
+                <Button
+                  type="button"
+                  variant={(estado || "").toUpperCase() === "RECHAZADO" ? "destructive" : "outline"}
+                  disabled={!idCliente.trim() || estadoSaving || isFinal}
+                  onClick={() => updateEstado("RECHAZADO")}
+                >
+                  Rechazado
+                </Button>
+                {estado && (
+                  <span className="ml-2 text-sm text-muted-foreground">Estado actual: <strong>{estado}</strong></span>
+                )}
               </div>
 
               <div className="grid gap-6 md:grid-cols-2">

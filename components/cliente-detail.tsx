@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
 import type { Cliente } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -22,7 +21,6 @@ import {
   User,
   Plus,
   MessageSquare,
-  UploadCloud,
 } from "lucide-react"
 
 const API_BASE =
@@ -50,10 +48,12 @@ function normalizeObservaciones(input: unknown): ObsItem[] {
 }
 
 export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
-  const router = useRouter()
-
   const [newObservacion, setNewObservacion] = useState("")
   const [obsSaving, setObsSaving] = useState(false)
+
+  // estado local para “Estado” (col W)
+  const [estado, setEstado] = useState<string>(cliente.estado || "")
+  const [estadoSaving, setEstadoSaving] = useState(false)
 
   // 1) Tomamos observaciones del cliente y las normalizamos
   const initialObservaciones: ObsItem[] = useMemo(() => {
@@ -73,19 +73,12 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
     setObservaciones(initialObservaciones)
   }, [initialObservaciones])
 
-  const getEstadoBadgeVariant = (estado: Cliente["estado"]) => {
-    switch (estado) {
-      case "Activo":
-        return "default"
-      case "Pendiente":
-        return "secondary"
-      case "Cerrado":
-        return "outline"
-      case "Cancelado":
-        return "destructive"
-      default:
-        return "default"
-    }
+  const getEstadoBadgeVariant = (value: string) => {
+    const e = (value || "").toUpperCase()
+    if (e === "APROBADO") return "default"
+    if (e === "RECHAZADO") return "destructive"
+    if (e === "ASIGNADO" || e === "PENDIENTE") return "secondary"
+    return "outline"
   }
 
   const nowAR = () => {
@@ -98,11 +91,6 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
     } catch {
       return new Date().toISOString()
     }
-  }
-
-  // Navegar al formulario de carga con el ID preseleccionado
-  const goToCarga = () => {
-    router.push(`/carga?id=${encodeURIComponent(cliente.id)}`)
   }
 
   // Guardar observación en Sheets (columna ObservacionN libre) + fecha en FechaObsN
@@ -138,6 +126,29 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
     }
   }
 
+  // --- APROBADO / RECHAZADO ---
+  const isFinal = ["APROBADO", "RECHAZADO"].includes((estado || "").toUpperCase())
+
+  const setEstadoSheet = async (nuevo: "APROBADO" | "RECHAZADO") => {
+    if (!cliente?.id || isFinal) return
+    setEstadoSaving(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(cliente.id)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estado: nuevo }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j?.message || "No se pudo actualizar el estado")
+      setEstado(nuevo)
+    } catch (e: any) {
+      console.error(e)
+      alert(e?.message || "Error al actualizar estado")
+    } finally {
+      setEstadoSaving(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
@@ -152,15 +163,25 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
         </div>
 
         <div className="flex items-center gap-2">
-          <Badge variant={getEstadoBadgeVariant(cliente.estado)} className="text-sm px-3 py-1">
-            {cliente.estado}
-          </Badge>
-
-          {/* Botón NUEVO: Cargar datos */}
-          <Button onClick={goToCarga} className="ml-2">
-            <UploadCloud className="mr-2 size-4" />
-            Cargar datos
+          {/* Botones de estado */}
+          <Button
+            variant={(estado || "").toUpperCase() === "APROBADO" ? "default" : "outline"}
+            disabled={estadoSaving || isFinal}
+            onClick={() => setEstadoSheet("APROBADO")}
+          >
+            Aprobado
           </Button>
+          <Button
+            variant={(estado || "").toUpperCase() === "RECHAZADO" ? "destructive" : "outline"}
+            disabled={estadoSaving || isFinal}
+            onClick={() => setEstadoSheet("RECHAZADO")}
+          >
+            Rechazado
+          </Button>
+
+          <Badge variant={getEstadoBadgeVariant(estado)} className="text-sm px-3 py-1">
+            {estado || "—"}
+          </Badge>
         </div>
       </div>
 
