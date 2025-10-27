@@ -1,6 +1,6 @@
 "use client"
 
-import React, { Suspense, useEffect, useMemo, useState } from "react"
+import React, { Suspense, useEffect, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,17 +13,27 @@ export const dynamic = "force-dynamic"
 
 type SheetEvent = {
   id: string
+  // CLIENTE
+  nombre: string
+  telefono: string
+  mail: string
+  lugar: string
+  cantidadPersonas: string
+  observacion: string
+  canal: string
+  // EVENTO
+  fechaEvento: string            // <-- Columna P (editable)
   horarioInicioEvento: string
   horarioFinalizacionEvento: string
   sector: string
   vendedorComercialAsignado: string
   presupuesto: string
-  estado?: string
 }
 
+type HistItem = { campo: string; antes: string; despues: string; fechaISO: string }
+
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  "https://eventos-node-express-back.vercel.app"
+  process.env.NEXT_PUBLIC_API_BASE_URL || "https://eventos-node-express-back.vercel.app"
 
 function CargaPageInner() {
   const search = useSearchParams()
@@ -31,7 +41,18 @@ function CargaPageInner() {
 
   const [submitted, setSubmitted] = useState(false)
   const [idCliente, setIdCliente] = useState(idFromQuery)
-  const [formData, setFormData] = useState({
+
+  const [formData, setFormData] = useState<Omit<SheetEvent, "id">>({
+    // CLIENTE
+    nombre: "",
+    telefono: "",
+    mail: "",
+    lugar: "",
+    cantidadPersonas: "",
+    observacion: "",
+    canal: "",
+    // EVENTO
+    fechaEvento: "",              // yyyy-mm-dd desde <input type="date">
     horarioInicioEvento: "",
     horarioFinalizacionEvento: "",
     sector: "",
@@ -43,25 +64,14 @@ function CargaPageInner() {
   const [loadingId, setLoadingId] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // Estado (W) + rechazo UI
-  const [estado, setEstado] = useState<string>("")
-  const [estadoSaving, setEstadoSaving] = useState(false)
-  const [showRechazoInput, setShowRechazoInput] = useState(false)
-  const [rechazoMotivo, setRechazoMotivo] = useState("")
-  const [rechazoSaving, setRechazoSaving] = useState(false)
-  const [estadoPrevio, setEstadoPrevio] = useState<string>("")
+  // ------- utils -------
+  const cleanStr = (v: any) => String(v ?? "").trim()
+  function onlyHHmm(s: string) {
+    const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(s).trim())
+    return m ? `${m[1]}:${m[2]}` : ""
+  }
 
-  const locked = useMemo(() => {
-    const o = originalData
-    return {
-      horarioInicioEvento: !!o?.horarioInicioEvento,
-      horarioFinalizacionEvento: !!o?.horarioFinalizacionEvento,
-      sector: !!o?.sector,
-      vendedorComercialAsignado: !!o?.vendedorComercialAsignado,
-      presupuesto: !!o?.presupuesto,
-    }
-  }, [originalData])
-
+  // ------- fetch by ID -------
   useEffect(() => {
     if (idFromQuery) {
       setIdCliente(idFromQuery)
@@ -70,15 +80,9 @@ function CargaPageInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idFromQuery])
 
-  function onlyHHmm(s: string) {
-    const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(s.trim())
-    return m ? `${m[1]}:${m[2]}` : ""
-  }
-
   async function fetchById(id: string) {
-    const cleanId = (id || "").trim()
+    const cleanId = cleanStr(id)
     if (!cleanId) return
-
     setLoadingId(true)
     setErrorMsg(null)
     try {
@@ -89,38 +93,42 @@ function CargaPageInner() {
       const ev = json.data as any
       const payload: SheetEvent = {
         id: ev.id ?? cleanId,
+        // CLIENTE
+        nombre: ev.nombre || "",
+        telefono: ev.telefono || "",
+        mail: ev.mail || "",
+        lugar: ev.lugar || "",
+        cantidadPersonas: ev.cantidadPersonas || "",
+        observacion: ev.observacion || "",
+        canal: ev.canal || "",
+        // EVENTO
+        fechaEvento: ev.fechaEvento || "",
         horarioInicioEvento: ev.horarioInicioEvento || "",
         horarioFinalizacionEvento: ev.horarioFinalizacionEvento || "",
         sector: ev.sector || "",
         vendedorComercialAsignado: ev.vendedorComercialAsignado || "",
         presupuesto: ev.presupuesto || "",
-        estado: ev.estado || "",
       }
 
       setOriginalData(payload)
       setFormData({
+        nombre: payload.nombre,
+        telefono: payload.telefono,
+        mail: payload.mail,
+        lugar: payload.lugar,
+        cantidadPersonas: payload.cantidadPersonas,
+        observacion: payload.observacion,
+        canal: payload.canal,
+        fechaEvento: payload.fechaEvento,
         horarioInicioEvento: payload.horarioInicioEvento,
         horarioFinalizacionEvento: payload.horarioFinalizacionEvento,
         sector: payload.sector,
         vendedorComercialAsignado: payload.vendedorComercialAsignado,
         presupuesto: payload.presupuesto,
       })
-      setEstado(payload.estado || "")
-      setEstadoPrevio(payload.estado || "")
-      setShowRechazoInput(false)
-      setRechazoMotivo("")
     } catch (e: any) {
       console.error(e)
       setOriginalData(null)
-      setFormData({
-        horarioInicioEvento: "",
-        horarioFinalizacionEvento: "",
-        sector: "",
-        vendedorComercialAsignado: "",
-        presupuesto: "",
-      })
-      setEstado("")
-      setEstadoPrevio("")
       setErrorMsg(e?.message || "Error al buscar el cliente")
     } finally {
       setLoadingId(false)
@@ -128,52 +136,126 @@ function CargaPageInner() {
   }
 
   const onBlurId = () => {
-    if (idCliente.trim()) void fetchById(idCliente)
+    const id = cleanStr(idCliente)
+    if (id && id !== "0") void fetchById(id)
   }
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // ------- handlers -------
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
     const { name, value } = e.target
-    setFormData((prev) => ({
-      ...prev,
-      [name]: (name === "horarioInicioEvento" || name === "horarioFinalizacionEvento") ? value : value,
-    }))
+    setFormData((prev) => ({ ...prev, [name]: value }))
+  }
+
+  function buildHistorialCambios(o: SheetEvent | null, n: Omit<SheetEvent, "id">): HistItem[] {
+    if (!o) return []
+    const campos: (keyof Omit<SheetEvent, "id">)[] = [
+      // cliente
+      "nombre",
+      "telefono",
+      "mail",
+      "lugar",
+      "cantidadPersonas",
+      "observacion",
+      "canal",
+      // evento
+      "fechaEvento",                    // <-- track P
+      "horarioInicioEvento",
+      "horarioFinalizacionEvento",
+      "sector",
+      "vendedorComercialAsignado",
+      "presupuesto",
+    ]
+    const now = new Date().toISOString()
+    const hist: HistItem[] = []
+    for (const c of campos) {
+      const antes = cleanStr((o as any)[c])
+      const despues =
+        c === "horarioInicioEvento" || c === "horarioFinalizacionEvento"
+          ? onlyHHmm((n as any)[c])
+          : cleanStr((n as any)[c])
+      if (antes !== despues) hist.push({ campo: String(c), antes, despues, fechaISO: now })
+    }
+    return hist
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setErrorMsg(null)
 
-    const cleanId = idCliente.trim()
-    if (!cleanId) return setErrorMsg("Debes ingresar el ID Cliente")
-    if (!originalData) return setErrorMsg("Primero busca un cliente válido por ID")
+    const id = cleanStr(idCliente)
+    const esCreacion = !id || id === "0"
 
-    const payload: Record<string, string> = {}
-    if (!originalData.horarioInicioEvento && formData.horarioInicioEvento) {
-      payload.horarioInicioEvento = onlyHHmm(formData.horarioInicioEvento)
-    }
-    if (!originalData.horarioFinalizacionEvento && formData.horarioFinalizacionEvento) {
-      payload.horarioFinalizacionEvento = onlyHHmm(formData.horarioFinalizacionEvento)
-    }
-    if (!originalData.sector && formData.sector.trim()) {
-      payload.sector = formData.sector.trim()
-    }
-    if (!originalData.vendedorComercialAsignado && formData.vendedorComercialAsignado.trim()) {
-      payload.vendedorComercialAsignado = formData.vendedorComercialAsignado.trim()
-    }
-    if (!originalData.presupuesto && formData.presupuesto.trim()) {
-      payload.presupuesto = formData.presupuesto.trim()
+    const payloadBase = {
+      ...formData,
+      horarioInicioEvento: onlyHHmm(formData.horarioInicioEvento),
+      horarioFinalizacionEvento: onlyHHmm(formData.horarioFinalizacionEvento),
+      // fechaEvento se envía como yyyy-mm-dd desde el input date
     }
 
-    if (Object.keys(payload).length === 0) {
-      setErrorMsg("No hay campos nuevos para agregar (todos ya tienen datos).")
+    if (esCreacion) {
+      // NO tocar la columna A (ID). Tu script la completa.
+      if (!cleanStr(formData.nombre)) {
+        setErrorMsg("Para crear un cliente nuevo, completá el Nombre.")
+        return
+      }
+      try {
+        const res = await fetch(`${API_BASE}/api/eventSheet`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          // No mandamos 'id' ni 'createIdStrategy'
+          body: JSON.stringify({ ...payloadBase }),
+        })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json?.message || "No se pudo crear el registro")
+
+        setSubmitted(true)
+        setTimeout(() => {
+          setSubmitted(false)
+          // Dejamos el ID vacío para que tu script en Sheets lo genere
+          setIdCliente("")
+          setOriginalData(null)
+          // Si querés, podés limpiar el form:
+          // setFormData({...formData, nombre:"", telefono:"", ...})
+        }, 1200)
+      } catch (e: any) {
+        console.error(e)
+        setErrorMsg(e?.message || "Error al crear el registro")
+      }
+      return
+    }
+
+    // EDICIÓN (comparar contra original y enviar sólo cambios + historial)
+    if (!originalData) {
+      setErrorMsg("Buscá primero un cliente válido por ID para editar.")
+      return
+    }
+
+    const hist = buildHistorialCambios(originalData, payloadBase)
+    const changed: Record<string, string> = {}
+    ;(Object.keys(payloadBase) as (keyof typeof payloadBase)[]).forEach((k) => {
+      const oldVal = cleanStr((originalData as any)?.[k] ?? "")
+      const newVal =
+        k === "horarioInicioEvento" || k === "horarioFinalizacionEvento"
+          ? onlyHHmm((payloadBase as any)[k])
+          : cleanStr((payloadBase as any)[k])
+      if (oldVal !== newVal) changed[k as string] = newVal
+    })
+
+    if (Object.keys(changed).length === 0) {
+      setErrorMsg("No hay cambios para guardar.")
       return
     }
 
     try {
-      const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(cleanId)}`, {
+      const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(id)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({
+          ...changed,
+          __historialCambios: hist, // backend: mapear a Observacion1..5 y FechaObs1..5
+        }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json?.message || "No se pudo guardar")
@@ -181,81 +263,15 @@ function CargaPageInner() {
       setSubmitted(true)
       setTimeout(() => {
         setSubmitted(false)
-        void fetchById(cleanId)
-      }, 1500)
+        void fetchById(id)
+      }, 1200)
     } catch (e: any) {
       console.error(e)
       setErrorMsg(e?.message || "Error al guardar")
     }
   }
 
-  // Estado: Aprobado / Rechazado
-  const isFinal = ["APROBADO", "RECHAZADO"].includes((estado || "").toUpperCase())
-
-  const clickAprobado = async () => {
-    if (!idCliente.trim() || !originalData) return
-    if (isFinal || showRechazoInput) return
-    setEstadoSaving(true)
-    try {
-      const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(idCliente.trim())}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ estado: "APROBADO" }),
-      })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j?.message || "No se pudo actualizar el estado")
-      setEstado("APROBADO")
-    } catch (e: any) {
-      console.error(e)
-      setErrorMsg(e?.message || "Error al actualizar estado")
-    } finally {
-      setEstadoSaving(false)
-    }
-  }
-
-  const clickRechazado = () => {
-    if (!idCliente.trim() || !originalData) {
-      setErrorMsg("Primero buscá un cliente válido por ID")
-      return
-    }
-    setEstadoPrevio(estado)
-    setEstado("RECHAZADO")
-    setShowRechazoInput(true)
-  }
-
-  const cancelarRechazo = () => {
-    setShowRechazoInput(false)
-    setRechazoMotivo("")
-    setEstado(estadoPrevio)
-  }
-
-  const confirmarRechazo = async () => {
-    const motivo = rechazoMotivo.trim()
-    if (!motivo) {
-      setErrorMsg("Debes ingresar el motivo del rechazo.")
-      return
-    }
-    setRechazoSaving(true)
-    try {
-      const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(idCliente.trim())}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ estado: "RECHAZADO", rechazoMotivo: motivo }),
-      })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j?.message || "No se pudo actualizar el estado/motivo")
-      setShowRechazoInput(false)
-      setRechazoMotivo("")
-      setEstado("RECHAZADO")
-    } catch (e: any) {
-      console.error(e)
-      setErrorMsg(e?.message || "Error al guardar rechazo")
-      cancelarRechazo()
-    } finally {
-      setRechazoSaving(false)
-    }
-  }
-
+  // ------- UI -------
   if (submitted) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-background">
@@ -267,7 +283,9 @@ function CargaPageInner() {
               </div>
               <div>
                 <h2 className="text-2xl font-bold mb-2">Datos Enviados</h2>
-                <p className="text-muted-foreground">La información ha sido registrada correctamente.</p>
+                <p className="text-muted-foreground">
+                  La información ha sido registrada correctamente.
+                </p>
               </div>
             </div>
           </CardContent>
@@ -275,6 +293,8 @@ function CargaPageInner() {
       </div>
     )
   }
+
+  const esCreacion = !cleanStr(idCliente) || cleanStr(idCliente) === "0"
 
   return (
     <div className="min-h-[calc(100vh-4rem)] bg-background py-8">
@@ -288,59 +308,24 @@ function CargaPageInner() {
               <div>
                 <CardTitle className="text-2xl">Formulario de Carga</CardTitle>
                 <CardDescription>
-                  Ingresá el <strong>ID Cliente</strong>. Si existe, se completan los campos. Sólo podrás agregar en los campos vacíos.
+                  Ingresá el <strong>ID Cliente</strong> para editar. Si lo dejás vacío o ponés{" "}
+                  <strong>0</strong>, se creará un nuevo registro y la <strong>columna A (ID)</strong>{" "}
+                  quedará vacía (tu script la completa).
                 </CardDescription>
               </div>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {esCreacion ? (
+                <span className="inline-block rounded px-2 py-1 border">Modo creación</span>
+              ) : (
+                <span className="inline-block rounded px-2 py-1 border">Modo edición</span>
+              )}
             </div>
           </CardHeader>
 
           <CardContent>
-            {/* Estado + acciones */}
-            <div className="flex items-center gap-2 mb-6">
-              <Button
-                variant={(estado || "").toUpperCase() === "APROBADO" ? "default" : "outline"}
-                disabled={estadoSaving || isFinal || showRechazoInput}
-                onClick={clickAprobado}
-              >
-                Aprobado
-              </Button>
-              <Button
-                variant={(estado || "").toUpperCase() === "RECHAZADO" ? "destructive" : "outline"}
-                disabled={estadoSaving || isFinal}
-                onClick={clickRechazado}
-              >
-                Rechazado
-              </Button>
-              <span className="text-sm text-muted-foreground ml-2">Estado actual: <strong>{estado || "—"}</strong></span>
-            </div>
-
-            {showRechazoInput && (
-              <div className="mb-6 border rounded-md p-4">
-                <Label htmlFor="motivo-rechazo" className="text-destructive">Motivo del Rechazo</Label>
-                <Textarea
-                  id="motivo-rechazo"
-                  value={rechazoMotivo}
-                  onChange={(e) => setRechazoMotivo(e.target.value)}
-                  placeholder="Ej: Cliente canceló por presupuesto / fecha / etc."
-                  rows={3}
-                  className="resize-none mt-2"
-                />
-                <div className="flex gap-3 mt-3">
-                  <Button
-                    onClick={confirmarRechazo}
-                    disabled={!rechazoMotivo.trim() || rechazoSaving}
-                    variant="destructive"
-                  >
-                    {rechazoSaving ? "Guardando..." : "Confirmar rechazo"}
-                  </Button>
-                  <Button variant="outline" onClick={cancelarRechazo} disabled={rechazoSaving}>
-                    Cancelar
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="space-y-6">
+            <form onSubmit={handleSubmit} className="space-y-8">
+              {/* ID */}
               <div className="space-y-2">
                 <Label htmlFor="idCliente">ID Cliente</Label>
                 <Input
@@ -349,78 +334,173 @@ function CargaPageInner() {
                   value={idCliente}
                   onChange={(e) => setIdCliente(e.target.value)}
                   onBlur={onBlurId}
-                  placeholder="Ej: 1"
-                  required
+                  placeholder="Vacío o 0 para crear"
                 />
                 {loadingId && <p className="text-xs text-muted-foreground">Buscando cliente...</p>}
                 {errorMsg && <p className="text-xs text-red-600">{errorMsg}</p>}
               </div>
 
-              <div className="grid gap-6 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="horarioInicioEvento">Horario Inicio Evento</Label>
-                  <Input
-                    id="horarioInicioEvento"
-                    name="horarioInicioEvento"
-                    type="time"
-                    value={formData.horarioInicioEvento || ""}
-                    onChange={handleChange}
-                    disabled={locked.horarioInicioEvento}
-                  />
-                  {locked.horarioInicioEvento && <p className="text-xs text-muted-foreground">Este dato ya existe y no puede editarse.</p>}
+              {/* DATOS DEL CLIENTE */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-lg">Datos del Cliente</h3>
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="nombre">Nombre</Label>
+                    <Input
+                      id="nombre"
+                      name="nombre"
+                      value={formData.nombre}
+                      onChange={handleChange}
+                      placeholder="Ej: Elena Gómez"
+                      required={esCreacion}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="telefono">Teléfono</Label>
+                    <Input
+                      id="telefono"
+                      name="telefono"
+                      value={formData.telefono}
+                      onChange={handleChange}
+                      placeholder="Ej: 11 5555 5555"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="mail">Mail</Label>
+                    <Input
+                      id="mail"
+                      name="mail"
+                      type="email"
+                      value={formData.mail}
+                      onChange={handleChange}
+                      placeholder="cliente@mail.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="canal">Canal</Label>
+                    <Input
+                      id="canal"
+                      name="canal"
+                      value={formData.canal}
+                      onChange={handleChange}
+                      placeholder="WhatsApp / Mail / Otro"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="lugar">Lugar</Label>
+                    <Input
+                      id="lugar"
+                      name="lugar"
+                      value={formData.lugar}
+                      onChange={handleChange}
+                      placeholder="Ej: Cochinchina, Salón, etc."
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="cantidadPersonas">Cantidad de Personas</Label>
+                    <Input
+                      id="cantidadPersonas"
+                      name="cantidadPersonas"
+                      type="number"
+                      value={formData.cantidadPersonas}
+                      onChange={handleChange}
+                      placeholder="Ej: 80"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="horarioFinalizacionEvento">Horario Finalización Evento</Label>
-                  <Input
-                    id="horarioFinalizacionEvento"
-                    name="horarioFinalizacionEvento"
-                    type="time"
-                    value={formData.horarioFinalizacionEvento || ""}
+                  <Label htmlFor="observacion">Observación</Label>
+                  <Textarea
+                    id="observacion"
+                    name="observacion"
+                    value={formData.observacion}
                     onChange={handleChange}
-                    disabled={locked.horarioFinalizacionEvento}
+                    placeholder="Notas generales…"
+                    rows={3}
+                    className="resize-none"
                   />
-                  {locked.horarioFinalizacionEvento && <p className="text-xs text-muted-foreground">Este dato ya existe y no puede editarse.</p>}
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="sector">Sector</Label>
-                <Input
-                  id="sector"
-                  name="sector"
-                  value={formData.sector}
-                  onChange={handleChange}
-                  placeholder="Ej: Corporativo, Social, Cultural"
-                  disabled={locked.sector}
-                />
-                {locked.sector && <p className="text-xs text-muted-foreground">Este dato ya existe y no puede editarse.</p>}
-              </div>
+              {/* DATOS DEL EVENTO */}
+              <div className="space-y-4">
+                <h3 className="font-semibold text-lg">Datos del Evento</h3>
 
-              <div className="space-y-2">
-                <Label htmlFor="vendedorComercialAsignado">Comercial Asignado</Label>
-                <Input
-                  id="vendedorComercialAsignado"
-                  name="vendedorComercialAsignado"
-                  value={formData.vendedorComercialAsignado}
-                  onChange={handleChange}
-                  placeholder="Nombre del comercial"
-                  disabled={locked.vendedorComercialAsignado}
-                />
-                {locked.vendedorComercialAsignado && <p className="text-xs text-muted-foreground">Este dato ya existe y no puede editarse.</p>}
-              </div>
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="fechaEvento">Fecha Evento</Label>
+                    <Input
+                      id="fechaEvento"
+                      name="fechaEvento"
+                      type="date"
+                      value={formData.fechaEvento}
+                      onChange={handleChange}
+                    />
+                  </div>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="presupuesto">Presupuesto</Label>
-                <Input
-                  id="presupuesto"
-                  name="presupuesto"
-                  value={formData.presupuesto}
-                  onChange={handleChange}
-                  placeholder="Monto / referencia"
-                  disabled={locked.presupuesto}
-                />
-                {locked.presupuesto && <p className="text-xs text-muted-foreground">Este dato ya existe y no puede editarse.</p>}
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="horarioInicioEvento">Horario Inicio Evento</Label>
+                    <Input
+                      id="horarioInicioEvento"
+                      name="horarioInicioEvento"
+                      type="time"
+                      value={formData.horarioInicioEvento || ""}
+                      onChange={handleChange}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="horarioFinalizacionEvento">Horario Finalización Evento</Label>
+                    <Input
+                      id="horarioFinalizacionEvento"
+                      name="horarioFinalizacionEvento"
+                      type="time"
+                      value={formData.horarioFinalizacionEvento || ""}
+                      onChange={handleChange}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="sector">Sector</Label>
+                  <Input
+                    id="sector"
+                    name="sector"
+                    value={formData.sector}
+                    onChange={handleChange}
+                    placeholder="Ej: Corporativo, Social, Cultural"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="vendedorComercialAsignado">Comercial Asignado</Label>
+                  <Input
+                    id="vendedorComercialAsignado"
+                    name="vendedorComercialAsignado"
+                    value={formData.vendedorComercialAsignado}
+                    onChange={handleChange}
+                    placeholder="Nombre del comercial"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="presupuesto">Presupuesto</Label>
+                  <Input
+                    id="presupuesto"
+                    name="presupuesto"
+                    value={formData.presupuesto}
+                    onChange={handleChange}
+                    placeholder="Monto / referencia"
+                  />
+                </div>
               </div>
 
               <Button type="submit" className="w-full" size="lg">
@@ -428,8 +508,11 @@ function CargaPageInner() {
               </Button>
 
               <p className="text-xs text-muted-foreground mt-2">
-                Al guardar: si cargás horarios, se registra la <strong>marca temporal</strong> (columna S).
-                Si cargás presupuesto, se registra la <strong>fecha de envío del presupuesto</strong> (columna V).
+                • En <strong>creación</strong>, el registro se inserta sin ID y tu script de Sheets
+                completa la columna <strong>A</strong> automáticamente. <br />
+                • En <strong>edición</strong>, solo se actualizan los campos modificados y se envía
+                el historial de cambios para que el backend lo escriba en Observacion1..5 y
+                FechaObs1..5.
               </p>
             </form>
           </CardContent>
