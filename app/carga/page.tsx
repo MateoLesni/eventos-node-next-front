@@ -22,19 +22,21 @@ type SheetEvent = {
   observacion: string
   canal: string
   // EVENTO
-  fechaEvento: string            // <-- Columna P (editable)
+  fechaEvento: string            // Columna P
   horarioInicioEvento: string
   horarioFinalizacionEvento: string
   sector: string
   vendedorComercialAsignado: string
   presupuesto: string
+  // meta
+  estado?: string                // no se muestra, pero lo usamos para enviar cambios
 }
 
 type HistItem = { campo: string; antes: string; despues: string; fechaISO: string }
 
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "https://eventos-node-express-back.vercel.app"
-
+  //process.env.NEXT_PUBLIC_API_BASE_URL || "https://eventos-node-express-back.vercel.app"
+    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001"
 function CargaPageInner() {
   const search = useSearchParams()
   const idFromQuery = search.get("id") ?? ""
@@ -52,26 +54,28 @@ function CargaPageInner() {
     observacion: "",
     canal: "",
     // EVENTO
-    fechaEvento: "",              // yyyy-mm-dd desde <input type="date">
+    fechaEvento: "",
     horarioInicioEvento: "",
     horarioFinalizacionEvento: "",
     sector: "",
     vendedorComercialAsignado: "",
     presupuesto: "",
+    // meta
+    estado: "",
   })
 
   const [originalData, setOriginalData] = useState<SheetEvent | null>(null)
   const [loadingId, setLoadingId] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // ------- utils -------
+  // utils
   const cleanStr = (v: any) => String(v ?? "").trim()
   function onlyHHmm(s: string) {
     const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(s).trim())
     return m ? `${m[1]}:${m[2]}` : ""
   }
 
-  // ------- fetch by ID -------
+  // fetch by id
   useEffect(() => {
     if (idFromQuery) {
       setIdCliente(idFromQuery)
@@ -108,6 +112,7 @@ function CargaPageInner() {
         sector: ev.sector || "",
         vendedorComercialAsignado: ev.vendedorComercialAsignado || "",
         presupuesto: ev.presupuesto || "",
+        estado: ev.estado || "",
       }
 
       setOriginalData(payload)
@@ -125,6 +130,7 @@ function CargaPageInner() {
         sector: payload.sector,
         vendedorComercialAsignado: payload.vendedorComercialAsignado,
         presupuesto: payload.presupuesto,
+        estado: payload.estado || "",
       })
     } catch (e: any) {
       console.error(e)
@@ -140,7 +146,7 @@ function CargaPageInner() {
     if (id && id !== "0") void fetchById(id)
   }
 
-  // ------- handlers -------
+  // handlers
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
@@ -152,20 +158,12 @@ function CargaPageInner() {
     if (!o) return []
     const campos: (keyof Omit<SheetEvent, "id">)[] = [
       // cliente
-      "nombre",
-      "telefono",
-      "mail",
-      "lugar",
-      "cantidadPersonas",
-      "observacion",
-      "canal",
+      "nombre","telefono","mail","lugar","cantidadPersonas","observacion","canal",
       // evento
-      "fechaEvento",                    // <-- track P
-      "horarioInicioEvento",
-      "horarioFinalizacionEvento",
-      "sector",
-      "vendedorComercialAsignado",
-      "presupuesto",
+      "fechaEvento","horarioInicioEvento","horarioFinalizacionEvento","sector",
+      "vendedorComercialAsignado","presupuesto",
+      // meta
+      "estado",
     ]
     const now = new Date().toISOString()
     const hist: HistItem[] = []
@@ -187,25 +185,28 @@ function CargaPageInner() {
     const id = cleanStr(idCliente)
     const esCreacion = !id || id === "0"
 
-    const payloadBase = {
+    const baseNormalized: Omit<SheetEvent, "id"> = {
       ...formData,
       horarioInicioEvento: onlyHHmm(formData.horarioInicioEvento),
       horarioFinalizacionEvento: onlyHHmm(formData.horarioFinalizacionEvento),
-      // fechaEvento se envía como yyyy-mm-dd desde el input date
     }
 
     if (esCreacion) {
-      // NO tocar la columna A (ID). Tu script la completa.
+      // no escribir ID; tu script lo genera en A
       if (!cleanStr(formData.nombre)) {
         setErrorMsg("Para crear un cliente nuevo, completá el Nombre.")
         return
+      }
+      // Si viene presupuesto en creación, forzar estado "PRESUPUESTO EN REVISIÓN"
+      const payloadCreate: any = { ...baseNormalized }
+      if (cleanStr(baseNormalized.presupuesto)) {
+        payloadCreate.estado = "PRESUPUESTO EN REVISIÓN"
       }
       try {
         const res = await fetch(`${API_BASE}/api/eventSheet`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          // No mandamos 'id' ni 'createIdStrategy'
-          body: JSON.stringify({ ...payloadBase }),
+          body: JSON.stringify(payloadCreate),
         })
         const json = await res.json()
         if (!res.ok) throw new Error(json?.message || "No se pudo crear el registro")
@@ -213,11 +214,15 @@ function CargaPageInner() {
         setSubmitted(true)
         setTimeout(() => {
           setSubmitted(false)
-          // Dejamos el ID vacío para que tu script en Sheets lo genere
+          // reset para una nueva carga
           setIdCliente("")
           setOriginalData(null)
-          // Si querés, podés limpiar el form:
-          // setFormData({...formData, nombre:"", telefono:"", ...})
+          setFormData({
+            nombre: "", telefono: "", mail: "", lugar: "", cantidadPersonas: "",
+            observacion: "", canal: "", fechaEvento: "", horarioInicioEvento: "",
+            horarioFinalizacionEvento: "", sector: "", vendedorComercialAsignado: "",
+            presupuesto: "", estado: "",
+          })
         }, 1200)
       } catch (e: any) {
         console.error(e)
@@ -226,27 +231,41 @@ function CargaPageInner() {
       return
     }
 
-    // EDICIÓN (comparar contra original y enviar sólo cambios + historial)
+    // EDICIÓN
     if (!originalData) {
       setErrorMsg("Buscá primero un cliente válido por ID para editar.")
       return
     }
 
-    const hist = buildHistorialCambios(originalData, payloadBase)
+    // Detectar cambios y forzar estado si cambió 'presupuesto'
     const changed: Record<string, string> = {}
-    ;(Object.keys(payloadBase) as (keyof typeof payloadBase)[]).forEach((k) => {
-      const oldVal = cleanStr((originalData as any)?.[k] ?? "")
+    ;(Object.keys(baseNormalized) as (keyof typeof baseNormalized)[]).forEach((k) => {
+      const oldVal = cleanStr((originalData as any)[k] ?? "")
       const newVal =
         k === "horarioInicioEvento" || k === "horarioFinalizacionEvento"
-          ? onlyHHmm((payloadBase as any)[k])
-          : cleanStr((payloadBase as any)[k])
+          ? onlyHHmm((baseNormalized as any)[k])
+          : cleanStr((baseNormalized as any)[k])
       if (oldVal !== newVal) changed[k as string] = newVal
     })
+
+    const presupuestoCambio =
+      "presupuesto" in changed ||
+      (!cleanStr(originalData.presupuesto) && cleanStr(baseNormalized.presupuesto))
+
+    if (presupuestoCambio) {
+      changed["estado"] = "PRESUPUESTO EN REVISIÓN"
+    }
 
     if (Object.keys(changed).length === 0) {
       setErrorMsg("No hay cambios para guardar.")
       return
     }
+
+    // Historial con el posible cambio de estado incluido
+    const hist = buildHistorialCambios(
+      originalData,
+      { ...baseNormalized, ...(changed.estado ? { estado: changed.estado } : {}) }
+    )
 
     try {
       const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(id)}`, {
@@ -254,7 +273,7 @@ function CargaPageInner() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...changed,
-          __historialCambios: hist, // backend: mapear a Observacion1..5 y FechaObs1..5
+          __historialCambios: hist,
         }),
       })
       const json = await res.json()
@@ -271,7 +290,7 @@ function CargaPageInner() {
     }
   }
 
-  // ------- UI -------
+  // UI
   if (submitted) {
     return (
       <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center bg-background">
@@ -309,8 +328,10 @@ function CargaPageInner() {
                 <CardTitle className="text-2xl">Formulario de Carga</CardTitle>
                 <CardDescription>
                   Ingresá el <strong>ID Cliente</strong> para editar. Si lo dejás vacío o ponés{" "}
-                  <strong>0</strong>, se creará un nuevo registro y la <strong>columna A (ID)</strong>{" "}
-                  quedará vacía (tu script la completa).
+                  <strong>0</strong>, se creará un nuevo registro y la columna <strong>A (ID)</strong>{" "}
+                  quedará vacía (tu script la completa). Cuando cargues o edites{" "}
+                  <strong>Presupuesto</strong>, el estado pasará a{" "}
+                  <em>Presupuesto en Revisión</em>.
                 </CardDescription>
               </div>
             </div>
@@ -500,20 +521,16 @@ function CargaPageInner() {
                     onChange={handleChange}
                     placeholder="Monto / referencia"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Si cargas o modificás el presupuesto, el estado pasará a{" "}
+                    <em>Presupuesto en Revisión</em>.
+                  </p>
                 </div>
               </div>
 
               <Button type="submit" className="w-full" size="lg">
                 Guardar
               </Button>
-
-              <p className="text-xs text-muted-foreground mt-2">
-                • En <strong>creación</strong>, el registro se inserta sin ID y tu script de Sheets
-                completa la columna <strong>A</strong> automáticamente. <br />
-                • En <strong>edición</strong>, solo se actualizan los campos modificados y se envía
-                el historial de cambios para que el backend lo escriba en Observacion1..5 y
-                FechaObs1..5.
-              </p>
             </form>
           </CardContent>
         </Card>
