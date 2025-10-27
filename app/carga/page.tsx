@@ -35,8 +35,8 @@ type SheetEvent = {
 type HistItem = { campo: string; antes: string; despues: string; fechaISO: string }
 
 const API_BASE =
-  //process.env.NEXT_PUBLIC_API_BASE_URL || "https://eventos-node-express-back.vercel.app"
-    process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001"
+    process.env.NEXT_PUBLIC_API_BASE_URL || "https://eventos-node-express-back.vercel.app"
+    //process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001"
 function CargaPageInner() {
   const search = useSearchParams()
   const idFromQuery = search.get("id") ?? ""
