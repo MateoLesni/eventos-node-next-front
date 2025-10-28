@@ -8,6 +8,13 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { FileText, CheckCircle2 } from "lucide-react"
+import {
+  Select,
+  SelectTrigger,
+  SelectContent,
+  SelectItem,
+  SelectValue,
+} from "@/components/ui/select"
 
 export const dynamic = "force-dynamic"
 
@@ -28,15 +35,20 @@ type SheetEvent = {
   sector: string
   vendedorComercialAsignado: string
   presupuesto: string
-  // meta
-  estado?: string                // no se muestra, pero lo usamos para enviar cambios
+  // meta (solo lectura; NO se envía)
+  estado?: string
 }
 
 type HistItem = { campo: string; antes: string; despues: string; fechaISO: string }
 
 const API_BASE =
-    process.env.NEXT_PUBLIC_API_BASE_URL || "https://eventos-node-express-back.vercel.app"
-    //process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001"
+  process.env.NEXT_PUBLIC_API_BASE_URL || "https://eventos-node-express-back.vercel.app"
+// process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001"
+
+const LUGARES = ["CoChinchina", "Kona", "Costa 7070", "Cruza Polo", "Milvidas"]
+const CANALES = ["Whatsapp", "Instagram", "Linkedin", "Web"]
+const COMERCIALES = ["Pilar", "Tano", "Johana"]
+
 function CargaPageInner() {
   const search = useSearchParams()
   const idFromQuery = search.get("id") ?? ""
@@ -60,7 +72,7 @@ function CargaPageInner() {
     sector: "",
     vendedorComercialAsignado: "",
     presupuesto: "",
-    // meta
+    // meta (solo lectura)
     estado: "",
   })
 
@@ -75,11 +87,37 @@ function CargaPageInner() {
     return m ? `${m[1]}:${m[2]}` : ""
   }
 
-  // fetch by id
+  const resetForm = () => {
+    setOriginalData(null)
+    setFormData({
+      nombre: "",
+      telefono: "",
+      mail: "",
+      lugar: "",
+      cantidadPersonas: "",
+      observacion: "",
+      canal: "",
+      fechaEvento: "",
+      horarioInicioEvento: "",
+      horarioFinalizacionEvento: "",
+      sector: "",
+      vendedorComercialAsignado: "",
+      presupuesto: "",
+      estado: "",
+    })
+    setErrorMsg(null)
+  }
+
+  // fetch by id when query provides one
   useEffect(() => {
     if (idFromQuery) {
       setIdCliente(idFromQuery)
-      void fetchById(idFromQuery)
+      // si viene 0 por query, resetea
+      if (cleanStr(idFromQuery) === "0") {
+        resetForm()
+      } else {
+        void fetchById(idFromQuery)
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idFromQuery])
@@ -87,6 +125,10 @@ function CargaPageInner() {
   async function fetchById(id: string) {
     const cleanId = cleanStr(id)
     if (!cleanId) return
+    if (cleanId === "0") { // 0 = creación -> limpiar
+      resetForm()
+      return
+    }
     setLoadingId(true)
     setErrorMsg(null)
     try {
@@ -112,6 +154,7 @@ function CargaPageInner() {
         sector: ev.sector || "",
         vendedorComercialAsignado: ev.vendedorComercialAsignado || "",
         presupuesto: ev.presupuesto || "",
+        // meta (solo lectura)
         estado: ev.estado || "",
       }
 
@@ -141,9 +184,23 @@ function CargaPageInner() {
     }
   }
 
+  // Si el usuario escribe manualmente 0 o deja vacío, entramos en modo creación y limpiamos
+  const handleIdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value
+    setIdCliente(v)
+    const vv = cleanStr(v)
+    if (vv === "" || vv === "0") {
+      resetForm()
+    }
+  }
+
   const onBlurId = () => {
     const id = cleanStr(idCliente)
-    if (id && id !== "0") void fetchById(id)
+    if (!id || id === "0") {
+      resetForm()
+      return
+    }
+    void fetchById(id)
   }
 
   // handlers
@@ -154,6 +211,7 @@ function CargaPageInner() {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
+  // Historial de cambios (EXCLUYE 'estado' porque es fórmula y NO se escribe)
   function buildHistorialCambios(o: SheetEvent | null, n: Omit<SheetEvent, "id">): HistItem[] {
     if (!o) return []
     const campos: (keyof Omit<SheetEvent, "id">)[] = [
@@ -162,8 +220,7 @@ function CargaPageInner() {
       // evento
       "fechaEvento","horarioInicioEvento","horarioFinalizacionEvento","sector",
       "vendedorComercialAsignado","presupuesto",
-      // meta
-      "estado",
+      // meta: estado EXCLUIDO
     ]
     const now = new Date().toISOString()
     const hist: HistItem[] = []
@@ -189,6 +246,7 @@ function CargaPageInner() {
       ...formData,
       horarioInicioEvento: onlyHHmm(formData.horarioInicioEvento),
       horarioFinalizacionEvento: onlyHHmm(formData.horarioFinalizacionEvento),
+      // estado se mantiene solo lectura; no lo enviaremos
     }
 
     if (esCreacion) {
@@ -197,11 +255,10 @@ function CargaPageInner() {
         setErrorMsg("Para crear un cliente nuevo, completá el Nombre.")
         return
       }
-      // Si viene presupuesto en creación, forzar estado "PRESUPUESTO EN REVISIÓN"
-      const payloadCreate: any = { ...baseNormalized }
-      if (cleanStr(baseNormalized.presupuesto)) {
-        payloadCreate.estado = "PRESUPUESTO EN REVISIÓN"
-      }
+
+      // Payload de creación: EXCLUIR 'estado'
+      const { estado: _omitEstado, ...payloadCreate } = baseNormalized as any
+
       try {
         const res = await fetch(`${API_BASE}/api/eventSheet`, {
           method: "POST",
@@ -216,14 +273,8 @@ function CargaPageInner() {
           setSubmitted(false)
           // reset para una nueva carga
           setIdCliente("")
-          setOriginalData(null)
-          setFormData({
-            nombre: "", telefono: "", mail: "", lugar: "", cantidadPersonas: "",
-            observacion: "", canal: "", fechaEvento: "", horarioInicioEvento: "",
-            horarioFinalizacionEvento: "", sector: "", vendedorComercialAsignado: "",
-            presupuesto: "", estado: "",
-          })
-        }, 1200)
+          resetForm()
+        }, 900)
       } catch (e: any) {
         console.error(e)
         setErrorMsg(e?.message || "Error al crear el registro")
@@ -237,9 +288,10 @@ function CargaPageInner() {
       return
     }
 
-    // Detectar cambios y forzar estado si cambió 'presupuesto'
+    // Detectar cambios (EXCLUYENDO 'estado')
     const changed: Record<string, string> = {}
     ;(Object.keys(baseNormalized) as (keyof typeof baseNormalized)[]).forEach((k) => {
+      if (k === "estado") return // no se envía ni compara para escribir
       const oldVal = cleanStr((originalData as any)[k] ?? "")
       const newVal =
         k === "horarioInicioEvento" || k === "horarioFinalizacionEvento"
@@ -248,32 +300,21 @@ function CargaPageInner() {
       if (oldVal !== newVal) changed[k as string] = newVal
     })
 
-    const presupuestoCambio =
-      "presupuesto" in changed ||
-      (!cleanStr(originalData.presupuesto) && cleanStr(baseNormalized.presupuesto))
-
-    if (presupuestoCambio) {
-      changed["estado"] = "PRESUPUESTO EN REVISIÓN"
-    }
-
     if (Object.keys(changed).length === 0) {
       setErrorMsg("No hay cambios para guardar.")
       return
     }
 
-    // Historial con el posible cambio de estado incluido
-    const hist = buildHistorialCambios(
-      originalData,
-      { ...baseNormalized, ...(changed.estado ? { estado: changed.estado } : {}) }
-    )
+    // Historial EXCLUYENDO 'estado'
+    const hist = buildHistorialCambios(originalData, baseNormalized)
 
     try {
       const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(id)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...changed,
-          __historialCambios: hist,
+          ...changed,                // ← sin 'estado'
+          __historialCambios: hist,  // metadato opcional si lo consumís en el back
         }),
       })
       const json = await res.json()
@@ -283,7 +324,7 @@ function CargaPageInner() {
       setTimeout(() => {
         setSubmitted(false)
         void fetchById(id)
-      }, 1200)
+      }, 900)
     } catch (e: any) {
       console.error(e)
       setErrorMsg(e?.message || "Error al guardar")
@@ -329,9 +370,8 @@ function CargaPageInner() {
                 <CardDescription>
                   Ingresá el <strong>ID Cliente</strong> para editar. Si lo dejás vacío o ponés{" "}
                   <strong>0</strong>, se creará un nuevo registro y la columna <strong>A (ID)</strong>{" "}
-                  quedará vacía (tu script la completa). Cuando cargues o edites{" "}
-                  <strong>Presupuesto</strong>, el estado pasará a{" "}
-                  <em>Presupuesto en Revisión</em>.
+                  quedará vacía (tu script la completa). El <strong>Estado</strong> se calcula por{" "}
+                  fórmula en Sheets (no se escribe desde acá).
                 </CardDescription>
               </div>
             </div>
@@ -353,7 +393,7 @@ function CargaPageInner() {
                   id="idCliente"
                   name="idCliente"
                   value={idCliente}
-                  onChange={(e) => setIdCliente(e.target.value)}
+                  onChange={handleIdChange}
                   onBlur={onBlurId}
                   placeholder="Vacío o 0 para crear"
                 />
@@ -364,6 +404,7 @@ function CargaPageInner() {
               {/* DATOS DEL CLIENTE */}
               <div className="space-y-4">
                 <h3 className="font-semibold text-lg">Datos del Cliente</h3>
+
                 <div className="grid gap-6 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="nombre">Nombre</Label>
@@ -376,6 +417,7 @@ function CargaPageInner() {
                       required={esCreacion}
                     />
                   </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="telefono">Teléfono</Label>
                     <Input
@@ -400,29 +442,43 @@ function CargaPageInner() {
                       placeholder="cliente@mail.com"
                     />
                   </div>
+
                   <div className="space-y-2">
-                    <Label htmlFor="canal">Canal</Label>
-                    <Input
-                      id="canal"
-                      name="canal"
+                    <Label>Canal</Label>
+                    <Select
                       value={formData.canal}
-                      onChange={handleChange}
-                      placeholder="WhatsApp / Mail / Otro"
-                    />
+                      onValueChange={(val) => setFormData((p) => ({ ...p, canal: val }))}
+                    >
+                      <SelectTrigger id="canal">
+                        <SelectValue placeholder="Elegí un canal" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CANALES.map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
                 <div className="grid gap-6 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="lugar">Lugar</Label>
-                    <Input
-                      id="lugar"
-                      name="lugar"
+                    <Label>Lugar</Label>
+                    <Select
                       value={formData.lugar}
-                      onChange={handleChange}
-                      placeholder="Ej: Cochinchina, Salón, etc."
-                    />
+                      onValueChange={(val) => setFormData((p) => ({ ...p, lugar: val }))}
+                    >
+                      <SelectTrigger id="lugar">
+                        <SelectValue placeholder="Seleccioná un local" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LUGARES.map((l) => (
+                          <SelectItem key={l} value={l}>{l}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="cantidadPersonas">Cantidad de Personas</Label>
                     <Input
@@ -502,14 +558,22 @@ function CargaPageInner() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="vendedorComercialAsignado">Comercial Asignado</Label>
-                  <Input
-                    id="vendedorComercialAsignado"
-                    name="vendedorComercialAsignado"
+                  <Label>Comercial Asignado</Label>
+                  <Select
                     value={formData.vendedorComercialAsignado}
-                    onChange={handleChange}
-                    placeholder="Nombre del comercial"
-                  />
+                    onValueChange={(val) =>
+                      setFormData((p) => ({ ...p, vendedorComercialAsignado: val }))
+                    }
+                  >
+                    <SelectTrigger id="vendedorComercialAsignado">
+                      <SelectValue placeholder="Elegí un comercial" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COMERCIALES.map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="space-y-2">
@@ -522,8 +586,7 @@ function CargaPageInner() {
                     placeholder="Monto / referencia"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Si cargas o modificás el presupuesto, el estado pasará a{" "}
-                    <em>Presupuesto en Revisión</em>.
+                    El <strong>Estado</strong> se calcula automáticamente por fórmula en Sheets.
                   </p>
                 </div>
               </div>
