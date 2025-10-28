@@ -23,13 +23,26 @@ import {
   Plus,
   MessageSquare,
   UploadCloud,
+  History as HistoryIcon,
 } from "lucide-react"
 
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  "https://eventos-node-express-back.vercel.app"
+  process.env.NEXT_PUBLIC_API_BASE_URL || "https://eventos-node-express-back.vercel.app"
+
 
 type ObsItem = { texto: string; fecha: string; tipo?: "rechazo" | "normal" }
+
+type AuditEntry = {
+  fecha?: string;         // A
+  id?: string;            // B (ID Cliente)
+  rowNumber?: string;     // C (fila)
+  campo?: string;         // D
+  antes?: string;         // E
+  despues?: string;       // F
+  usuario?: string;       // G
+  origen?: string;        // H
+  nota?: string;          // I
+}
 
 interface ClienteDetailProps {
   cliente: Cliente
@@ -54,7 +67,8 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
   const [newObservacion, setNewObservacion] = useState("")
   const [obsSaving, setObsSaving] = useState(false)
 
-  // estado local para “Estado” (col W)
+  // estado local para “Estado” (col W). Se muestra, pero recordá que en tu flujo
+  // real ya no se escribe desde /carga (fórmula en Sheets).
   const [estado, setEstado] = useState<string>(cliente.estado || "")
   const [estadoSaving, setEstadoSaving] = useState(false)
 
@@ -63,6 +77,12 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
   const [rechazoMotivo, setRechazoMotivo] = useState("")
   const [rechazoSaving, setRechazoSaving] = useState(false)
   const [estadoPrevio, setEstadoPrevio] = useState<string>(estado)
+
+  // Histórico (Auditoría)
+  const [showHistorico, setShowHistorico] = useState(false)
+  const [historico, setHistorico] = useState<AuditEntry[] | null>(null)
+  const [historicoLoading, setHistoricoLoading] = useState(false)
+  const [historicoError, setHistoricoError] = useState<string | null>(null)
 
   const initialObservaciones: ObsItem[] = useMemo(() => {
     const fromList = (cliente as any)?.observacionesList
@@ -193,6 +213,50 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
       cancelarRechazo()
     } finally {
       setRechazoSaving(false)
+    }
+  }
+
+  // --- HISTÓRICO (Auditoría) ---
+  const toggleHistorico = async () => {
+    const next = !showHistorico
+    setShowHistorico(next)
+    if (next && historico === null) {
+      // primer apertura => cargar
+      setHistoricoLoading(true)
+      setHistoricoError(null)
+      try {
+        // Ajustá esta ruta si tu back expone otra: p.ej. /api/auditoria/:id
+        const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(cliente.id)}/audit`)
+        const json = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error(json?.message || "No se pudo obtener el histórico")
+
+        // Aceptamos tanto {data: AuditEntry[]} como AuditEntry[] a secas
+        const itemsRaw: any = Array.isArray(json) ? json : (Array.isArray(json?.data) ? json.data : [])
+        const items: AuditEntry[] = (itemsRaw || []).map((r: any) => ({
+          fecha: r.fecha ?? r.Fecha ?? r.created_at ?? "",
+          id: String(r.id ?? r.idCliente ?? r["ID Cliente"] ?? cliente.id ?? ""),
+          rowNumber: String(r.rowNumber ?? r.Fila ?? r.fila ?? ""),
+          campo: r.campo ?? r.Campo ?? "",
+          antes: r.antes ?? r["Valor Anterior"] ?? "",
+          despues: r.despues ?? r["Valor Nuevo"] ?? "",
+          usuario: r.usuario ?? r.Usuario ?? "",
+          origen: r.origen ?? r.Origen ?? "",
+          nota: r.nota ?? r.Nota ?? "",
+        }))
+
+        // Orden más reciente primero por fecha si es parseable
+        const sorted = [...items].sort((a, b) => {
+          const ta = Date.parse(a.fecha || "") || 0
+          const tb = Date.parse(b.fecha || "") || 0
+          return tb - ta
+        })
+        setHistorico(sorted)
+      } catch (e: any) {
+        console.error(e)
+        setHistoricoError(e?.message || "Error al cargar histórico")
+      } finally {
+        setHistoricoLoading(false)
+      }
     }
   }
 
@@ -343,20 +407,6 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
       </div>
 
       <Card>
-        <CardHeader><CardTitle className="text-lg">Información Adicional</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div><p className="text-sm font-medium mb-1">Canal</p><p className="text-sm text-muted-foreground">{cliente.canal}</p></div>
-            <div><p className="text-sm font-medium mb-1">Mensaje del Cliente</p><p className="text-sm text-muted-foreground">{cliente.observacion}</p></div>
-            <div><p className="text-sm font-medium mb-1">Respuesta vía Mail</p><p className="text-sm text-muted-foreground">{cliente.respuestaViaMail}</p></div>
-            <div><p className="text-sm font-medium mb-1">Marca Temporal</p><p className="text-sm text-muted-foreground">{cliente.marcaTemporal}</p></div>
-            <div><p className="text-sm font-medium mb-1">ID Fecha Cliente</p><p className="text-sm text-muted-foreground">{cliente.idFechaCliente}</p></div>
-            <div><p className="text-sm font-medium mb-1">Hora Cliente</p><p className="text-sm text-muted-foreground">{cliente.horaCliente}</p></div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
             <MessageSquare className="size-5 text-muted-foreground" />
@@ -409,6 +459,64 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
             </Button>
           </div>
         </CardContent>
+      </Card>
+
+      {/* HISTÓRICO (AUDITORÍA) */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div className="flex items-center gap-2">
+            <HistoryIcon className="size-5 text-muted-foreground" />
+            <CardTitle className="text-lg">Histórico</CardTitle>
+          </div>
+          <Button variant="outline" size="sm" onClick={toggleHistorico}>
+            {showHistorico ? "Ocultar" : "Ver histórico"}
+          </Button>
+        </CardHeader>
+
+        {showHistorico && (
+          <CardContent className="space-y-3">
+            {historicoLoading && (
+              <p className="text-sm text-muted-foreground">Cargando histórico…</p>
+            )}
+            {historicoError && (
+              <p className="text-sm text-red-600">{historicoError}</p>
+            )}
+            {!historicoLoading && !historicoError && (historico?.length ?? 0) === 0 && (
+              <p className="text-sm text-muted-foreground">Sin cambios registrados para este cliente.</p>
+            )}
+
+            {!historicoLoading && !historicoError && (historico?.length ?? 0) > 0 && (
+              <div className="space-y-2">
+                {historico!.map((h, idx) => (
+                  <div key={`${idx}-${h.fecha}-${h.campo}`} className="rounded-md border p-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs text-muted-foreground">
+                        {h.fecha || "—"} • Fila: {h.rowNumber || "—"} • {h.origen || "BACK"}
+                      </p>
+                      {h.usuario ? (
+                        <Badge variant="outline" className="text-xs">{h.usuario}</Badge>
+                      ) : null}
+                    </div>
+                    <div className="mt-1">
+                      <p className="text-sm font-medium">{h.campo || "Campo"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium">Antes:</span> {h.antes ?? ""}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium">Después:</span> {h.despues ?? ""}
+                      </p>
+                      {h.nota ? (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          <span className="font-medium">Nota:</span> {h.nota}
+                        </p>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        )}
       </Card>
     </div>
   )

@@ -43,7 +43,7 @@ type HistItem = { campo: string; antes: string; despues: string; fechaISO: strin
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL || "https://eventos-node-express-back.vercel.app"
-// process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001"
+
 
 const LUGARES = ["CoChinchina", "Kona", "Costa 7070", "Cruza Polo", "Milvidas"]
 const CANALES = ["Whatsapp", "Instagram", "Linkedin", "Web"]

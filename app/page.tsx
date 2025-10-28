@@ -6,9 +6,7 @@ import { ClientesTable } from "@/components/clientes-table"
 import { ClienteDetail } from "@/components/cliente-detail"
 import { Users } from "lucide-react"
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  "https://eventos-node-express-back.vercel.app" // fallback
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "https://eventos-node-express-back.vercel.app" // fallback
 
 export default function Home() {
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null)
