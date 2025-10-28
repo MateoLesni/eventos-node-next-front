@@ -29,19 +29,18 @@ import {
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL || "https://eventos-node-express-back.vercel.app"
 
-
 type ObsItem = { texto: string; fecha: string; tipo?: "rechazo" | "normal" }
 
 type AuditEntry = {
-  fecha?: string;         // A
-  id?: string;            // B (ID Cliente)
-  rowNumber?: string;     // C (fila)
-  campo?: string;         // D
-  antes?: string;         // E
-  despues?: string;       // F
-  usuario?: string;       // G
-  origen?: string;        // H
-  nota?: string;          // I
+  fecha?: string
+  id?: string
+  rowNumber?: string
+  campo?: string
+  antes?: string
+  despues?: string
+  usuario?: string
+  origen?: string
+  nota?: string
 }
 
 interface ClienteDetailProps {
@@ -67,8 +66,7 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
   const [newObservacion, setNewObservacion] = useState("")
   const [obsSaving, setObsSaving] = useState(false)
 
-  // estado local para “Estado” (col W). Se muestra, pero recordá que en tu flujo
-  // real ya no se escribe desde /carga (fórmula en Sheets).
+  // Estado visible (col W en Sheets por fórmula). No lo escribimos desde /carga.
   const [estado, setEstado] = useState<string>(cliente.estado || "")
   const [estadoSaving, setEstadoSaving] = useState(false)
 
@@ -93,7 +91,9 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
   }, [cliente])
 
   const [observaciones, setObservaciones] = useState<ObsItem[]>(initialObservaciones)
-  useEffect(() => { setObservaciones(initialObservaciones) }, [initialObservaciones])
+  useEffect(() => {
+    setObservaciones(initialObservaciones)
+  }, [initialObservaciones])
 
   const getEstadoBadgeVariant = (value: string) => {
     const e = (value || "").toUpperCase()
@@ -149,22 +149,24 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
   // --- APROBADO / RECHAZADO ---
   const isFinal = ["APROBADO", "RECHAZADO"].includes((estado || "").toUpperCase())
 
+  // ✅ APROBADO: escribe AO = "APROBADO" usando rechazoMotivo del back
   const setEstadoSheet = async (nuevo: "APROBADO" | "RECHAZADO") => {
     if (!cliente?.id) return
     if (nuevo === "RECHAZADO") {
-      // abrir input de motivo; no confirmamos aún
       setEstadoPrevio(estado)
       setEstado("RECHAZADO")
       setShowRechazoInput(true)
       return
     }
     if (isFinal) return
+
     setEstadoSaving(true)
     try {
       const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(cliente.id)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ estado: "APROBADO" }),
+        // Enviamos rechazoMotivo: "APROBADO" para que el back lo escriba en AO
+        body: JSON.stringify({ estado: "APROBADO", rechazoMotivo: "APROBADO" }),
       })
       const j = await res.json()
       if (!res.ok) throw new Error(j?.message || "No se pudo actualizar el estado")
@@ -180,9 +182,10 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
   const cancelarRechazo = () => {
     setShowRechazoInput(false)
     setRechazoMotivo("")
-    setEstado(estadoPrevio) // vuelve al estado anterior
+    setEstado(estadoPrevio)
   }
 
+  // ❌ RECHAZADO: exige motivo y escribe AO = motivo
   const confirmarRechazo = async () => {
     const motivo = rechazoMotivo.trim()
     if (!motivo) {
@@ -198,7 +201,6 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
       })
       const j = await res.json()
       if (!res.ok) throw new Error(j?.message || "No se pudo actualizar el estado/motivo")
-      // añadir observación “roja” al tope
       setObservaciones((prev) => [
         { texto: `Motivo de rechazo: ${motivo}`, fecha: nowAR(), tipo: "rechazo" },
         ...prev,
@@ -209,7 +211,6 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
     } catch (e: any) {
       console.error(e)
       alert(e?.message || "Error al guardar rechazo")
-      // rollback visual
       cancelarRechazo()
     } finally {
       setRechazoSaving(false)
@@ -221,16 +222,13 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
     const next = !showHistorico
     setShowHistorico(next)
     if (next && historico === null) {
-      // primer apertura => cargar
       setHistoricoLoading(true)
       setHistoricoError(null)
       try {
-        // Ajustá esta ruta si tu back expone otra: p.ej. /api/auditoria/:id
         const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(cliente.id)}/audit`)
         const json = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(json?.message || "No se pudo obtener el histórico")
 
-        // Aceptamos tanto {data: AuditEntry[]} como AuditEntry[] a secas
         const itemsRaw: any = Array.isArray(json) ? json : (Array.isArray(json?.data) ? json.data : [])
         const items: AuditEntry[] = (itemsRaw || []).map((r: any) => ({
           fecha: r.fecha ?? r.Fecha ?? r.created_at ?? "",
@@ -244,7 +242,6 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
           nota: r.nota ?? r.Nota ?? "",
         }))
 
-        // Orden más reciente primero por fecha si es parseable
         const sorted = [...items].sort((a, b) => {
           const ta = Date.parse(a.fecha || "") || 0
           const tb = Date.parse(b.fecha || "") || 0
@@ -306,7 +303,7 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
           <CardHeader>
             <CardTitle className="text-lg text-destructive">Motivo del Rechazo</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
+        <CardContent className="space-y-3">
             <Label htmlFor="motivo-rechazo">Describe brevemente el motivo</Label>
             <Textarea
               id="motivo-rechazo"
@@ -475,16 +472,11 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
 
         {showHistorico && (
           <CardContent className="space-y-3">
-            {historicoLoading && (
-              <p className="text-sm text-muted-foreground">Cargando histórico…</p>
-            )}
-            {historicoError && (
-              <p className="text-sm text-red-600">{historicoError}</p>
-            )}
+            {historicoLoading && <p className="text-sm text-muted-foreground">Cargando histórico…</p>}
+            {historicoError && <p className="text-sm text-red-600">{historicoError}</p>}
             {!historicoLoading && !historicoError && (historico?.length ?? 0) === 0 && (
               <p className="text-sm text-muted-foreground">Sin cambios registrados para este cliente.</p>
             )}
-
             {!historicoLoading && !historicoError && (historico?.length ?? 0) > 0 && (
               <div className="space-y-2">
                 {historico!.map((h, idx) => (
