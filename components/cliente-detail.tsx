@@ -165,7 +165,6 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
       const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(cliente.id)}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        // Enviamos rechazoMotivo: "APROBADO" para que el back lo escriba en AO
         body: JSON.stringify({ estado: "APROBADO", rechazoMotivo: "APROBADO" }),
       })
       const j = await res.json()
@@ -303,7 +302,7 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
           <CardHeader>
             <CardTitle className="text-lg text-destructive">Motivo del Rechazo</CardTitle>
           </CardHeader>
-        <CardContent className="space-y-3">
+          <CardContent className="space-y-3">
             <Label htmlFor="motivo-rechazo">Describe brevemente el motivo</Label>
             <Textarea
               id="motivo-rechazo"
@@ -362,6 +361,16 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
             <div className="flex items-start gap-3">
               <Users className="size-4 mt-0.5 text-muted-foreground" />
               <div><p className="text-sm font-medium">Cantidad de Personas</p><p className="text-sm text-muted-foreground">{cliente.cantidadPersonas}</p></div>
+            </div>
+            {/* NUEVO: Mensaje del Cliente (columna I) */}
+            <div className="flex items-start gap-3">
+              <MessageSquare className="size-4 mt-0.5 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Mensaje del Cliente</p>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap break-words">
+                  {cliente.observacion || "—"}
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
