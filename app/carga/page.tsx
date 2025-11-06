@@ -45,9 +45,9 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL || "https://eventos-node-express-back.vercel.app"
 
 
-const LUGARES = ["CoChinchina", "Kona", "Costa 7070", "Cruza Polo", "Milvidas"]
-const CANALES = ["Whatsapp", "Instagram", "Linkedin", "Web"]
-const COMERCIALES = ["Pilar", "Tano", "Johana"]
+const LUGARES = ["CoChinchina", "Kona", "Costa 7070", "Cruza Polo", "Milvidas", "We Enjoy"]
+const CANALES = ["Whatsapp NG", "Instagram", "Linkedin", "Web", "Mail Directo", "Referido"]
+const COMERCIALES = ["Pilar", "Tano", "Johanna", "Trianna", "Delfina"]
 
 function CargaPageInner() {
   const search = useSearchParams()
