@@ -47,7 +47,7 @@ const API_BASE =
 
 const LUGARES = ["CoChinchina", "Kona", "Costa 7070", "Cruza Polo", "Milvidas", "We Enjoy"]
 const CANALES = ["Whatsapp NG", "Instagram", "Linkedin", "Web", "Mail Directo", "Referido"]
-const COMERCIALES = ["Pilar", "Tano", "Johanna", "Trianna", "Delfina"]
+const COMERCIALES = ["Pilar", "Tano", "Johanna", "Traianna", "Delfina"]
 
 function CargaPageInner() {
   const search = useSearchParams()
