@@ -45,7 +45,7 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL || "https://eventos-node-express-back.vercel.app"
 
 
-const LUGARES = ["CoChinchina", "Kona", "Costa 7070", "Cruza Polo", "Milvidas", "We Enjoy"]
+const LUGARES = ["CoChinChina", "Kona", "Costa7070", "CruzaPolo", "MilVidas", "We Enjoy"]
 const CANALES = ["Whatsapp NG", "Instagram", "Linkedin", "Web", "Mail Directo", "Referido"]
 const COMERCIALES = ["Pilar", "Tano", "Johanna Gatti", "Traianna Rosas", "Delfina Herrera Paz"]
 
