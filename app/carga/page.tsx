@@ -390,9 +390,7 @@ function CargaPageInner() {
                 <CardTitle className="text-2xl">Formulario de Carga</CardTitle>
                 <CardDescription>
                   Ingresá el <strong>ID Cliente</strong> para editar. Si lo dejás vacío o ponés{" "}
-                  <strong>0</strong>, se creará un nuevo registro y la columna <strong>A (ID)</strong>{" "}
-                  quedará vacía (tu script la completa). El <strong>Estado</strong> se calcula por{" "}
-                  fórmula en Sheets (no se escribe desde acá).
+                  <strong>0</strong>, se creará un nuevo registro. Si seleccionas un ID existente, podrás editar sus valores.
                 </CardDescription>
               </div>
             </div>
