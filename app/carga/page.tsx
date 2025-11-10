@@ -1,6 +1,6 @@
 "use client"
 
-import React, { Suspense, useEffect, useState } from "react"
+import React, { Suspense, useEffect, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -44,7 +44,6 @@ type HistItem = { campo: string; antes: string; despues: string; fechaISO: strin
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL || "https://eventos-node-express-back.vercel.app"
 
-
 const LUGARES = ["CoChinChina", "Kona", "Costa7070", "CruzaPolo", "MilVidas", "We Enjoy"]
 const CANALES = ["Whatsapp NG", "Instagram", "Linkedin", "Web", "Mail Directo", "Referido"]
 const COMERCIALES = ["Pilar", "Tano", "Johanna Gatti", "Traianna Rosas", "Delfina Herrera Paz"]
@@ -79,6 +78,16 @@ function CargaPageInner() {
   const [originalData, setOriginalData] = useState<SheetEvent | null>(null)
   const [loadingId, setLoadingId] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  // 🔒 Cooldown de guardado (10s)
+  const [saveLocked, setSaveLocked] = useState(false)
+  const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current)
+    }
+  }, [])
 
   // utils
   const cleanStr = (v: any) => String(v ?? "").trim()
@@ -237,6 +246,13 @@ function CargaPageInner() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // 🔒 Bloqueo: si está en cooldown, ignoramos el click
+    if (saveLocked) return
+    setSaveLocked(true)
+    if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current)
+    cooldownTimerRef.current = setTimeout(() => setSaveLocked(false), 10_000)
+
     setErrorMsg(null)
 
     const id = cleanStr(idCliente)
@@ -591,8 +607,8 @@ function CargaPageInner() {
                 </div>
               </div>
 
-              <Button type="submit" className="w-full" size="lg">
-                Guardar
+              <Button type="submit" className="w-full" size="lg" disabled={saveLocked}>
+                {saveLocked ? "Guardando… (esperá 10s)" : "Guardar"}
               </Button>
             </form>
           </CardContent>
