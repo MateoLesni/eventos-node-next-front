@@ -79,8 +79,9 @@ function CargaPageInner() {
   const [loadingId, setLoadingId] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // 🔒 Cooldown de guardado (10s)
+  // 🔒 Cooldown de guardado (10s) — estado para UI y ref para bloqueo sincrónico
   const [saveLocked, setSaveLocked] = useState(false)
+  const saveLockRef = useRef(false) // ← candado inmediato para evitar doble click en el mismo tick
   const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -247,11 +248,15 @@ function CargaPageInner() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // 🔒 Bloqueo: si está en cooldown, ignoramos el click
-    if (saveLocked) return
+    // 🔒 Candado sincrónico: si ya estamos guardando o en cooldown, salir
+    if (saveLockRef.current) return
+    saveLockRef.current = true
     setSaveLocked(true)
     if (cooldownTimerRef.current) clearTimeout(cooldownTimerRef.current)
-    cooldownTimerRef.current = setTimeout(() => setSaveLocked(false), 10_000)
+    cooldownTimerRef.current = setTimeout(() => {
+      saveLockRef.current = false
+      setSaveLocked(false)
+    }, 10_000)
 
     setErrorMsg(null)
 
@@ -607,7 +612,13 @@ function CargaPageInner() {
                 </div>
               </div>
 
-              <Button type="submit" className="w-full" size="lg" disabled={saveLocked}>
+              <Button
+                type="submit"
+                className={`w-full ${saveLocked ? "pointer-events-none opacity-80" : ""}`}
+                size="lg"
+                disabled={saveLocked}
+                aria-disabled={saveLocked}
+              >
                 {saveLocked ? "Guardando… (esperá 10s)" : "Guardar"}
               </Button>
             </form>
