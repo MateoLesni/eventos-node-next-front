@@ -244,10 +244,16 @@ function CargaPageInner() {
     return hist
   }
 
+  // 🔐 Regla de bloqueo para "Mensaje del Cliente":
+  // - Bloqueado solo si viene con contenido desde el backend (originalData)
+  // - Editable si está vacío al cargar (caso de creación)
+  const observacionLocked =
+    !!originalData && cleanStr(originalData.observacion) !== ""
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // Candado sincrónico
+    // Candado sincrónico anti-multi-click
     if (saveLockRef.current) return
     saveLockRef.current = true
     setSaveLocked(true)
@@ -275,7 +281,7 @@ function CargaPageInner() {
         return
       }
 
-      // EXCLUIR 'estado' (y el campo 'observacion' queda como esté; es read-only)
+      // EXCLUIR 'estado'
       const { estado: _omitEstado, ...payloadCreate } = baseNormalized as any
 
       try {
@@ -306,10 +312,11 @@ function CargaPageInner() {
       return
     }
 
-    // Detectar cambios (EXCLUYENDO 'estado')
+    // Detectar cambios (EXCLUYENDO 'estado' y 'observacion' si está bloqueada)
     const changed: Record<string, string> = {}
     ;(Object.keys(baseNormalized) as (keyof typeof baseNormalized)[]).forEach((k) => {
       if (k === "estado") return
+      if (k === "observacion" && observacionLocked) return // no permitir update si vino bloqueado
       const oldVal = cleanStr((originalData as any)[k] ?? "")
       const newVal =
         k === "horarioInicioEvento" || k === "horarioFinalizacionEvento"
@@ -386,7 +393,7 @@ function CargaPageInner() {
                 <CardTitle className="text-2xl">Formulario de Carga</CardTitle>
                 <CardDescription>
                   Ingresá el <strong>ID Cliente</strong> para editar. Si lo dejás vacío o ponés{" "}
-                  <strong>0</strong>, se creará un nuevo registro. Si seleccionas un ID existente, podrás editar sus valores.
+                  <strong>0</strong>, se creará un nuevo registro. Si seleccionás un ID existente, podrás editar sus valores.
                 </CardDescription>
               </div>
             </div>
@@ -513,13 +520,19 @@ function CargaPageInner() {
                     id="observacion"
                     name="observacion"
                     value={formData.observacion}
-                    readOnly
-                    disabled
-                    aria-readonly
-                    placeholder="Mensaje del cliente (solo lectura)"
+                    onChange={observacionLocked ? undefined : handleChange}
+                    readOnly={observacionLocked}
+                    disabled={observacionLocked}
+                    aria-readonly={observacionLocked}
+                    placeholder="Mensaje del cliente (editable si está vacío)"
                     rows={3}
                     className="resize-none"
                   />
+                  {observacionLocked && (
+                    <p className="text-xs text-muted-foreground">
+                      Campo bloqueado (proviene del cliente).
+                    </p>
+                  )}
                 </div>
               </div>
 
