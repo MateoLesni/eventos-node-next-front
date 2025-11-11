@@ -81,7 +81,7 @@ function CargaPageInner() {
 
   // 🔒 Cooldown de guardado (10s) — estado para UI y ref para bloqueo sincrónico
   const [saveLocked, setSaveLocked] = useState(false)
-  const saveLockRef = useRef(false) // ← candado inmediato para evitar doble click en el mismo tick
+  const saveLockRef = useRef(false) // candado inmediato
   const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -230,7 +230,6 @@ function CargaPageInner() {
       // evento
       "fechaEvento","horarioInicioEvento","horarioFinalizacionEvento","sector",
       "vendedorComercialAsignado","presupuesto",
-      // meta: estado EXCLUIDO
     ]
     const now = new Date().toISOString()
     const hist: HistItem[] = []
@@ -248,7 +247,7 @@ function CargaPageInner() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    // 🔒 Candado sincrónico: si ya estamos guardando o en cooldown, salir
+    // Candado sincrónico
     if (saveLockRef.current) return
     saveLockRef.current = true
     setSaveLocked(true)
@@ -271,13 +270,12 @@ function CargaPageInner() {
     }
 
     if (esCreacion) {
-      // no escribir ID; tu script lo genera en A
       if (!cleanStr(formData.nombre)) {
         setErrorMsg("Para crear un cliente nuevo, completá el Nombre.")
         return
       }
 
-      // Payload de creación: EXCLUIR 'estado'
+      // EXCLUIR 'estado' (y el campo 'observacion' queda como esté; es read-only)
       const { estado: _omitEstado, ...payloadCreate } = baseNormalized as any
 
       try {
@@ -292,7 +290,6 @@ function CargaPageInner() {
         setSubmitted(true)
         setTimeout(() => {
           setSubmitted(false)
-          // reset para una nueva carga
           setIdCliente("")
           resetForm()
         }, 900)
@@ -312,7 +309,7 @@ function CargaPageInner() {
     // Detectar cambios (EXCLUYENDO 'estado')
     const changed: Record<string, string> = {}
     ;(Object.keys(baseNormalized) as (keyof typeof baseNormalized)[]).forEach((k) => {
-      if (k === "estado") return // no se envía ni compara para escribir
+      if (k === "estado") return
       const oldVal = cleanStr((originalData as any)[k] ?? "")
       const newVal =
         k === "horarioInicioEvento" || k === "horarioFinalizacionEvento"
@@ -326,7 +323,6 @@ function CargaPageInner() {
       return
     }
 
-    // Historial EXCLUYENDO 'estado'
     const hist = buildHistorialCambios(originalData, baseNormalized)
 
     try {
@@ -334,8 +330,8 @@ function CargaPageInner() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...changed,                // ← sin 'estado'
-          __historialCambios: hist,  // metadato opcional si lo consumís en el back
+          ...changed,
+          __historialCambios: hist,
         }),
       })
       const json = await res.json()
@@ -512,13 +508,15 @@ function CargaPageInner() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="observacion">Observación</Label>
+                  <Label htmlFor="observacion">Mensaje del Cliente</Label>
                   <Textarea
                     id="observacion"
                     name="observacion"
                     value={formData.observacion}
-                    onChange={handleChange}
-                    placeholder="Notas generales…"
+                    readOnly
+                    disabled
+                    aria-readonly
+                    placeholder="Mensaje del cliente (solo lectura)"
                     rows={3}
                     className="resize-none"
                   />
