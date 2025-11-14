@@ -6,14 +6,16 @@ import { ClientesTable } from "@/components/clientes-table"
 import { ClienteDetail } from "@/components/cliente-detail"
 import { Users } from "lucide-react"
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "https://eventos-node-express-back.vercel.app" // fallback
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  "https://eventos-node-express-back.vercel.app" // fallback
 
 export default function Home() {
   const [selectedCliente, setSelectedCliente] = useState<Cliente | null>(null)
   const [clientesData, setClientesData] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(false)
 
-  // 1) Traer clientes (ya incluye observacionesList desde el backend)
+  // 1) Traer clientes (ya incluye observacionesList y ComercialFinal desde el backend)
   useEffect(() => {
     async function fetchClientes() {
       try {
@@ -76,14 +78,16 @@ export default function Home() {
 function mapClientes(data: any[]): Cliente[] {
   return data.map((item) => {
     // normalizamos observacionesList
-    const observacionesList = Array.isArray(item.observacionesList)
-      ? item.observacionesList.map((o: any) => {
-          if (typeof o === "string") return { texto: o, fecha: "" }
-          return {
-            texto: typeof o?.texto === "string" ? o.texto : "",
-            fecha: typeof o?.fecha === "string" ? o.fecha : "",
-          }
-        }).filter((o: any) => o.texto)
+    const observacionesList: Observacion[] = Array.isArray(item.observacionesList)
+      ? item.observacionesList
+          .map((o: any) => {
+            if (typeof o === "string") return { texto: o, fecha: "" }
+            return {
+              texto: typeof o?.texto === "string" ? o.texto : "",
+              fecha: typeof o?.fecha === "string" ? o.fecha : "",
+            }
+          })
+          .filter((o: any) => o.texto)
       : []
 
     return {
@@ -96,20 +100,25 @@ function mapClientes(data: any[]): Cliente[] {
       lugar: item.lugar || "",
       cantidadPersonas: Number(item.cantidadPersonas) || 0,
       observacion: item.observacion || "",
-      // ⚠️ antes metías una sola observación “base” acá; ya no hace falta
-      observaciones: [], // o eliminá este campo si ya no se usa
-      // 👇 preservamos lo que viene del back (lo usa el detalle)
+
+      // ya no usamos una lista “manual” de observaciones base
+      observaciones: [],
+
+      // lista completa de observaciones (texto + fecha) que viene del back
       observacionesList,
 
       redireccion: item.redireccion || "",
       canal: item.canal || "",
       respuestaViaMail: item.respuestaViaMail || "",
-      asignacionComercial: item.asignacionComercialMail || "",
+
+      // 👇 NUEVO: solo mostramos el ComercialFinal (columna AP en Sheets)
+      comercialFinal: item.ComercialFinal || "",
+
+      // el resto de los campos de detalle del evento
       horarioInicioEvento: item.horarioInicioEvento || "",
       horarioFinalizacionEvento: item.horarioFinalizacionEvento || "",
       fechaEvento: item.fechaEvento || "",
       sector: item.sector || "",
-      vendedorComercialAsignado: item.vendedorComercialAsignado || "",
       marcaTemporal: item.marcaTemporal || "",
       demora: item.demora || "",
       presupuesto: item.presupuesto || "",
@@ -118,4 +127,3 @@ function mapClientes(data: any[]): Cliente[] {
     }
   })
 }
-
