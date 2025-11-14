@@ -20,6 +20,9 @@ export const dynamic = "force-dynamic"
 
 type SheetEvent = {
   id: string
+  // META (automático, no editable)
+  fechaCliente: string // Columna B
+  horaCliente: string  // Columna C
   // CLIENTE
   nombre: string
   telefono: string
@@ -56,6 +59,9 @@ function CargaPageInner() {
   const [idCliente, setIdCliente] = useState(idFromQuery)
 
   const [formData, setFormData] = useState<Omit<SheetEvent, "id">>({
+    // META (no visible en el formulario)
+    fechaCliente: "",
+    horaCliente: "",
     // CLIENTE
     nombre: "",
     telefono: "",
@@ -79,9 +85,9 @@ function CargaPageInner() {
   const [loadingId, setLoadingId] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
-  // 🔒 Cooldown de guardado (10s) — estado para UI y ref para bloqueo sincrónico
+  // 🔒 Cooldown de guardado (10s)
   const [saveLocked, setSaveLocked] = useState(false)
-  const saveLockRef = useRef(false) // candado inmediato
+  const saveLockRef = useRef(false)
   const cooldownTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -100,6 +106,8 @@ function CargaPageInner() {
   const resetForm = () => {
     setOriginalData(null)
     setFormData({
+      fechaCliente: "",
+      horaCliente: "",
       nombre: "",
       telefono: "",
       mail: "",
@@ -135,7 +143,8 @@ function CargaPageInner() {
   async function fetchById(id: string) {
     const cleanId = cleanStr(id)
     if (!cleanId) return
-    if (cleanId === "0") { // 0 = creación -> limpiar
+    if (cleanId === "0") {
+      // 0 = creación -> limpiar
       resetForm()
       return
     }
@@ -149,6 +158,9 @@ function CargaPageInner() {
       const ev = json.data as any
       const payload: SheetEvent = {
         id: ev.id ?? cleanId,
+        // META
+        fechaCliente: ev.fechaCliente || "",
+        horaCliente: ev.horaCliente || "",
         // CLIENTE
         nombre: ev.nombre || "",
         telefono: ev.telefono || "",
@@ -170,6 +182,8 @@ function CargaPageInner() {
 
       setOriginalData(payload)
       setFormData({
+        fechaCliente: payload.fechaCliente,
+        horaCliente: payload.horaCliente,
         nombre: payload.nombre,
         telefono: payload.telefono,
         mail: payload.mail,
@@ -221,15 +235,15 @@ function CargaPageInner() {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  // Historial de cambios (EXCLUYE 'estado' porque es fórmula y NO se escribe)
+  // Historial de cambios (EXCLUYE 'estado' y también fechaCliente/horaCliente)
   function buildHistorialCambios(o: SheetEvent | null, n: Omit<SheetEvent, "id">): HistItem[] {
     if (!o) return []
     const campos: (keyof Omit<SheetEvent, "id">)[] = [
       // cliente
-      "nombre","telefono","mail","lugar","cantidadPersonas","observacion","canal",
+      "nombre", "telefono", "mail", "lugar", "cantidadPersonas", "observacion", "canal",
       // evento
-      "fechaEvento","horarioInicioEvento","horarioFinalizacionEvento","sector",
-      "vendedorComercialAsignado","presupuesto",
+      "fechaEvento", "horarioInicioEvento", "horarioFinalizacionEvento", "sector",
+      "vendedorComercialAsignado", "presupuesto",
     ]
     const now = new Date().toISOString()
     const hist: HistItem[] = []
@@ -244,9 +258,7 @@ function CargaPageInner() {
     return hist
   }
 
-  // 🔐 Regla de bloqueo para "Mensaje del Cliente":
-  // - Bloqueado solo si viene con contenido desde el backend (originalData)
-  // - Editable si está vacío al cargar (caso de creación)
+  // 🔐 Regla de bloqueo para "Mensaje del Cliente"
   const observacionLocked =
     !!originalData && cleanStr(originalData.observacion) !== ""
 
@@ -281,8 +293,23 @@ function CargaPageInner() {
         return
       }
 
+      // Fecha y hora automáticas para columnas B y C
+      const now = new Date()
+      const fechaHoy = now.toLocaleDateString("es-AR") // ej: 14/11/2025
+      const horaMin = now.toLocaleTimeString("es-AR", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }) // ej: 10:32
+
+      const payloadWithMeta = {
+        ...baseNormalized,
+        fechaCliente: fechaHoy,
+        horaCliente: horaMin,
+      }
+
       // EXCLUIR 'estado'
-      const { estado: _omitEstado, ...payloadCreate } = baseNormalized as any
+      const { estado: _omitEstado, ...payloadCreate } = payloadWithMeta as any
 
       try {
         const res = await fetch(`${API_BASE}/api/eventSheet`, {
@@ -312,11 +339,13 @@ function CargaPageInner() {
       return
     }
 
-    // Detectar cambios (EXCLUYENDO 'estado' y 'observacion' si está bloqueada)
+    // Detectar cambios (EXCLUYENDO 'estado', 'observacion' bloqueada y fecha/hora cliente)
     const changed: Record<string, string> = {}
     ;(Object.keys(baseNormalized) as (keyof typeof baseNormalized)[]).forEach((k) => {
       if (k === "estado") return
-      if (k === "observacion" && observacionLocked) return // no permitir update si vino bloqueado
+      if (k === "fechaCliente" || k === "horaCliente") return
+      if (k === "observacion" && observacionLocked) return
+
       const oldVal = cleanStr((originalData as any)[k] ?? "")
       const newVal =
         k === "horarioInicioEvento" || k === "horarioFinalizacionEvento"
@@ -393,7 +422,8 @@ function CargaPageInner() {
                 <CardTitle className="text-2xl">Formulario de Carga</CardTitle>
                 <CardDescription>
                   Ingresá el <strong>ID Cliente</strong> para editar. Si lo dejás vacío o ponés{" "}
-                  <strong>0</strong>, se creará un nuevo registro. Si seleccionás un ID existente, podrás editar sus valores.
+                  <strong>0</strong>, se creará un nuevo registro. Si seleccionás un ID existente,
+                  podrás editar sus valores.
                 </CardDescription>
               </div>
             </div>
@@ -419,7 +449,9 @@ function CargaPageInner() {
                   onBlur={onBlurId}
                   placeholder="Vacío o 0 para crear"
                 />
-                {loadingId && <p className="text-xs text-muted-foreground">Buscando cliente...</p>}
+                {loadingId && (
+                  <p className="text-xs text-muted-foreground">Buscando cliente...</p>
+                )}
                 {errorMsg && <p className="text-xs text-red-600">{errorMsg}</p>}
               </div>
 
@@ -469,14 +501,18 @@ function CargaPageInner() {
                     <Label>Canal</Label>
                     <Select
                       value={formData.canal}
-                      onValueChange={(val) => setFormData((p) => ({ ...p, canal: val }))}
+                      onValueChange={(val) =>
+                        setFormData((p) => ({ ...p, canal: val }))
+                      }
                     >
                       <SelectTrigger id="canal">
                         <SelectValue placeholder="Elegí un canal" />
                       </SelectTrigger>
                       <SelectContent>
                         {CANALES.map((c) => (
-                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                          <SelectItem key={c} value={c}>
+                            {c}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -488,14 +524,18 @@ function CargaPageInner() {
                     <Label>Lugar</Label>
                     <Select
                       value={formData.lugar}
-                      onValueChange={(val) => setFormData((p) => ({ ...p, lugar: val }))}
+                      onValueChange={(val) =>
+                        setFormData((p) => ({ ...p, lugar: val }))
+                      }
                     >
                       <SelectTrigger id="lugar">
                         <SelectValue placeholder="Seleccioná un local" />
                       </SelectTrigger>
                       <SelectContent>
                         {LUGARES.map((l) => (
-                          <SelectItem key={l} value={l}>{l}</SelectItem>
+                          <SelectItem key={l} value={l}>
+                            {l}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -600,7 +640,9 @@ function CargaPageInner() {
                     </SelectTrigger>
                     <SelectContent>
                       {COMERCIALES.map((c) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                        <SelectItem key={c} value={c}>
+                          {c}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
