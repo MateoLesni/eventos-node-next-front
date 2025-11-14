@@ -5,12 +5,12 @@ import type { Cliente } from "@/lib/types"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Search } from "lucide-react"
+
 // debajo de imports…
 const idToNumber = (id: string | number | undefined) => {
   const n = Number(id)
   return Number.isFinite(n) ? n : -Infinity // los que no tienen ID quedan al final
 }
-
 
 interface ClientesTableProps {
   clientes: Cliente[]
@@ -57,8 +57,11 @@ export function ClientesTable({ clientes, onClienteSelect }: ClientesTableProps)
 
     for (const c of clientes) {
       if (c.estado) estados.add(String(c.estado))
-      const vend = (c as any)?.vendedorComercialAsignado || (c as any)?.comercial || ""
+
+      // 👇 AHORA: el comercial SIEMPRE viene de comercialFinal (columna AP)
+      const vend = (c as any)?.comercialFinal || ""
       if (vend) comerciales.add(String(vend))
+
       const mk = getMonthKey((c as any).fechaEvento || "")
       if (mk) meses.add(mk)
       if (c.lugar) locales.add(String(c.lugar))
@@ -77,44 +80,43 @@ export function ClientesTable({ clientes, onClienteSelect }: ClientesTableProps)
 
   // --- Filtro acumulativo en memoria ---
   const filteredClientes = useMemo(() => {
-    return clientes
-      .filter((c) => {
-        // 1) Fecha rango sobre fechaEvento
-        const iso = toISODate((c as any).fechaEvento || "")
-        if (fechaDesde && (!iso || iso < fechaDesde)) return false
-        if (fechaHasta && (!iso || iso > fechaHasta)) return false
+    return clientes.filter((c) => {
+      // 1) Fecha rango sobre fechaEvento
+      const iso = toISODate((c as any).fechaEvento || "")
+      if (fechaDesde && (!iso || iso < fechaDesde)) return false
+      if (fechaHasta && (!iso || iso > fechaHasta)) return false
 
-        // 2) Estado
-        if (estado && String(c.estado || "") !== estado) return false
+      // 2) Estado
+      if (estado && String(c.estado || "") !== estado) return false
 
-        // 3) Comercial
-        const vend = (c as any)?.vendedorComercialAsignado || (c as any)?.comercial || ""
-        if (comercial && String(vend) !== comercial) return false
+      // 3) Comercial (solo ComercialFinal)
+      const vend = (c as any)?.comercialFinal || ""
+      if (comercial && String(vend) !== comercial) return false
 
-        // 4) Mes (YYYY-MM de fechaEvento)
-        const mk = getMonthKey((c as any).fechaEvento || "")
-        if (mes && mk !== mes) return false
+      // 4) Mes (YYYY-MM de fechaEvento)
+      const mk = getMonthKey((c as any).fechaEvento || "")
+      if (mes && mk !== mes) return false
 
-        // 5) Local
-        if (localSel && String(c.lugar || "") !== localSel) return false
+      // 5) Local
+      if (localSel && String(c.lugar || "") !== localSel) return false
 
-        // 6) Búsqueda global
-        if (searchTerm) {
-          const needle = searchTerm.toLowerCase()
-          const hay = Object.values(c).some((v) =>
-            (v ?? "").toString().toLowerCase().includes(needle),
-          )
-          if (!hay) return false
-        }
+      // 6) Búsqueda global
+      if (searchTerm) {
+        const needle = searchTerm.toLowerCase()
+        const hay = Object.values(c).some((v) =>
+          (v ?? "").toString().toLowerCase().includes(needle),
+        )
+        if (!hay) return false
+      }
 
-        return true
-      })
+      return true
+    })
   }, [clientes, fechaDesde, fechaHasta, estado, comercial, mes, localSel, searchTerm])
-  const orderedClientes = useMemo(
-  () => [...filteredClientes].sort((a, b) => idToNumber(b.id) - idToNumber(a.id)),
-  [filteredClientes]
-)
 
+  const orderedClientes = useMemo(
+    () => [...filteredClientes].sort((a, b) => idToNumber(b.id) - idToNumber(a.id)),
+    [filteredClientes],
+  )
 
   const getEstadoBadgeVariant = (estado: Cliente["estado"]) => {
     switch (estado) {
@@ -162,7 +164,7 @@ export function ClientesTable({ clientes, onClienteSelect }: ClientesTableProps)
           </select>
         </div>
 
-        {/* 3) Comercial */}
+        {/* 3) Comercial (basado en ComercialFinal) */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground w-20">Comercial</span>
           <select
@@ -235,8 +237,12 @@ export function ClientesTable({ clientes, onClienteSelect }: ClientesTableProps)
                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Teléfono</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Email</th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Lugar</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Fecha Evento</th>
-                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Presupuesto</th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                  Fecha Evento
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">
+                  Presupuesto
+                </th>
                 <th className="px-4 py-3 text-left text-sm font-medium text-muted-foreground">Estado</th>
               </tr>
             </thead>

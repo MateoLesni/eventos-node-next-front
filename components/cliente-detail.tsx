@@ -224,11 +224,13 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
       setHistoricoLoading(true)
       setHistoricoError(null)
       try {
-        const res = await fetch(`${API_BASE}/api/eventSheet/${encodeURIComponent(cliente.id)}/audit`)
+        const res = await fetch(
+          `${API_BASE}/api/eventSheet/${encodeURIComponent(cliente.id)}/audit`,
+        )
         const json = await res.json().catch(() => ({}))
         if (!res.ok) throw new Error(json?.message || "No se pudo obtener el histórico")
 
-        const itemsRaw: any = Array.isArray(json) ? json : (Array.isArray(json?.data) ? json.data : [])
+        const itemsRaw: any = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : []
         const items: AuditEntry[] = (itemsRaw || []).map((r: any) => ({
           fecha: r.fecha ?? r.Fecha ?? r.created_at ?? "",
           id: String(r.id ?? r.idCliente ?? r["ID Cliente"] ?? cliente.id ?? ""),
@@ -330,39 +332,63 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
-          <CardHeader><CardTitle className="text-lg">Información de Contacto</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-lg">Información de Contacto</CardTitle>
+          </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-start gap-3">
               <Phone className="size-4 mt-0.5 text-muted-foreground" />
-              <div><p className="text-sm font-medium">Teléfono</p><p className="text-sm text-muted-foreground">{cliente.telefono}</p></div>
+              <div>
+                <p className="text-sm font-medium">Teléfono</p>
+                <p className="text-sm text-muted-foreground">{cliente.telefono}</p>
+              </div>
             </div>
             <div className="flex items-start gap-3">
               <Mail className="size-4 mt-0.5 text-muted-foreground" />
-              <div><p className="text-sm font-medium">Email</p><p className="text-sm text-muted-foreground">{cliente.mail}</p></div>
+              <div>
+                <p className="text-sm font-medium">Email</p>
+                <p className="text-sm text-muted-foreground">{cliente.mail}</p>
+              </div>
             </div>
             <div className="flex items-start gap-3">
               <MapPin className="size-4 mt-0.5 text-muted-foreground" />
-              <div><p className="text-sm font-medium">Lugar</p><p className="text-sm text-muted-foreground">{cliente.lugar}</p></div>
+              <div>
+                <p className="text-sm font-medium">Lugar</p>
+                <p className="text-sm text-muted-foreground">{cliente.lugar}</p>
+              </div>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-lg">Detalles del Evento</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-lg">Detalles del Evento</CardTitle>
+          </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-start gap-3">
               <Calendar className="size-4 mt-0.5 text-muted-foreground" />
-              <div><p className="text-sm font-medium">Fecha del Evento</p><p className="text-sm text-muted-foreground">{cliente.fechaEvento}</p></div>
+              <div>
+                <p className="text-sm font-medium">Fecha del Evento</p>
+                <p className="text-sm text-muted-foreground">{cliente.fechaEvento}</p>
+              </div>
             </div>
             <div className="flex items-start gap-3">
               <Clock className="size-4 mt-0.5 text-muted-foreground" />
-              <div><p className="text-sm font-medium">Horario</p><p className="text-sm text-muted-foreground">{cliente.horarioInicioEvento} - {cliente.horarioFinalizacionEvento}</p></div>
+              <div>
+                <p className="text-sm font-medium">Horario</p>
+                <p className="text-sm text-muted-foreground">
+                  {cliente.horarioInicioEvento} - {cliente.horarioFinalizacionEvento}
+                </p>
+              </div>
             </div>
             <div className="flex items-start gap-3">
               <Users className="size-4 mt-0.5 text-muted-foreground" />
-              <div><p className="text-sm font-medium">Cantidad de Personas</p><p className="text-sm text-muted-foreground">{cliente.cantidadPersonas}</p></div>
+              <div>
+                <p className="text-sm font-medium">Cantidad de Personas</p>
+                <p className="text-sm text-muted-foreground">{cliente.cantidadPersonas}</p>
+              </div>
             </div>
-            {/* NUEVO: Mensaje del Cliente (columna I) */}
+            {/* Mensaje del Cliente (columna I) */}
             <div className="flex items-start gap-3">
               <MessageSquare className="size-4 mt-0.5 text-muted-foreground" />
               <div>
@@ -375,38 +401,56 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
           </CardContent>
         </Card>
 
+        {/* INFORMACIÓN COMERCIAL: solo un "Comercial Asignado" = columna AP (comercialFinal) */}
         <Card>
-          <CardHeader><CardTitle className="text-lg">Información Comercial</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-lg">Información Comercial</CardTitle>
+          </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-start gap-3">
               <User className="size-4 mt-0.5 text-muted-foreground" />
-              <div><p className="text-sm font-medium">Vendedor Asignado</p><p className="text-sm text-muted-foreground">{cliente.vendedorComercialAsignado}</p></div>
-            </div>
-            <div className="flex items-start gap-3">
-              <Mail className="size-4 mt-0.5 text-muted-foreground" />
-              <div><p className="text-sm font-medium">Asignación Comercial</p><p className="text-sm text-muted-foreground">{cliente.asignacionComercial}</p></div>
+              <div>
+                <p className="text-sm font-medium">Comercial Asignado</p>
+                <p className="text-sm text-muted-foreground">
+                  {(cliente as any).comercialFinal || "—"}
+                </p>
+              </div>
             </div>
             <div className="flex items-start gap-3">
               <Building2 className="size-4 mt-0.5 text-muted-foreground" />
-              <div><p className="text-sm font-medium">Sector</p><p className="text-sm text-muted-foreground">{cliente.sector}</p></div>
+              <div>
+                <p className="text-sm font-medium">Sector</p>
+                <p className="text-sm text-muted-foreground">{cliente.sector}</p>
+              </div>
             </div>
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader><CardTitle className="text-lg">Presupuesto y Estado</CardTitle></CardHeader>
+          <CardHeader>
+            <CardTitle className="text-lg">Presupuesto y Estado</CardTitle>
+          </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-start gap-3">
               <DollarSign className="size-4 mt-0.5 text-muted-foreground" />
-              <div><p className="text-sm font-medium">Presupuesto</p><p className="text-sm text-muted-foreground">{cliente.presupuesto}</p></div>
+              <div>
+                <p className="text-sm font-medium">Presupuesto</p>
+                <p className="text-sm text-muted-foreground">{cliente.presupuesto}</p>
+              </div>
             </div>
             <div className="flex items-start gap-3">
               <Calendar className="size-4 mt-0.5 text-muted-foreground" />
-              <div><p className="text-sm font-medium">Fecha Presupuesto Enviado</p><p className="text-sm text-muted-foreground">{cliente.fechaPresupEnviado}</p></div>
+              <div>
+                <p className="text-sm font-medium">Fecha Presupuesto Enviado</p>
+                <p className="text-sm text-muted-foreground">{cliente.fechaPresupEnviado}</p>
+              </div>
             </div>
             <div className="flex items-start gap-3">
               <Clock className="size-4 mt-0.5 text-muted-foreground" />
-              <div><p className="text-sm font-medium">Demora</p><p className="text-sm text-muted-foreground">{cliente.demora}</p></div>
+              <div>
+                <p className="text-sm font-medium">Demora</p>
+                <p className="text-sm text-muted-foreground">{cliente.demora}</p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -430,17 +474,29 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
                 return (
                   <div
                     key={safeKey}
-                    className={`pl-4 py-2 border-l-2 ${danger ? "border-destructive/70 bg-destructive/5 rounded-sm" : "border-primary"}`}
+                    className={`pl-4 py-2 border-l-2 ${
+                      danger ? "border-destructive/70 bg-destructive/5 rounded-sm" : "border-primary"
+                    }`}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <p className={`text-xs ${danger ? "text-destructive" : "text-muted-foreground"}`}>
+                      <p
+                        className={`text-xs ${
+                          danger ? "text-destructive" : "text-muted-foreground"
+                        }`}
+                      >
                         {o?.fecha || "—"}
                       </p>
                       <Badge variant={danger ? "destructive" : "outline"} className="text-xs">
                         {danger ? "Rechazo" : "Sistema"}
                       </Badge>
                     </div>
-                    <p className={`text-sm leading-relaxed ${danger ? "text-destructive" : ""}`}>{o?.texto}</p>
+                    <p
+                      className={`text-sm leading-relaxed ${
+                        danger ? "text-destructive" : ""
+                      }`}
+                    >
+                      {o?.texto}
+                    </p>
                   </div>
                 )
               })
@@ -459,7 +515,11 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
               rows={3}
               className="resize-none"
             />
-            <Button onClick={handleAddObservacion} className="w-full" disabled={!newObservacion.trim() || obsSaving}>
+            <Button
+              onClick={handleAddObservacion}
+              className="w-full"
+              disabled={!newObservacion.trim() || obsSaving}
+            >
               <Plus className="size-4 mr-2" />
               {obsSaving ? "Guardando..." : "Añadir Observación"}
             </Button>
@@ -481,10 +541,14 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
 
         {showHistorico && (
           <CardContent className="space-y-3">
-            {historicoLoading && <p className="text-sm text-muted-foreground">Cargando histórico…</p>}
+            {historicoLoading && (
+              <p className="text-sm text-muted-foreground">Cargando histórico…</p>
+            )}
             {historicoError && <p className="text-sm text-red-600">{historicoError}</p>}
             {!historicoLoading && !historicoError && (historico?.length ?? 0) === 0 && (
-              <p className="text-sm text-muted-foreground">Sin cambios registrados para este cliente.</p>
+              <p className="text-sm text-muted-foreground">
+                Sin cambios registrados para este cliente.
+              </p>
             )}
             {!historicoLoading && !historicoError && (historico?.length ?? 0) > 0 && (
               <div className="space-y-2">
@@ -495,7 +559,9 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
                         {h.fecha || "—"} • Fila: {h.rowNumber || "—"} • {h.origen || "BACK"}
                       </p>
                       {h.usuario ? (
-                        <Badge variant="outline" className="text-xs">{h.usuario}</Badge>
+                        <Badge variant="outline" className="text-xs">
+                          {h.usuario}
+                        </Badge>
                       ) : null}
                     </div>
                     <div className="mt-1">
