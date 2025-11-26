@@ -149,7 +149,7 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
   // --- APROBADO / RECHAZADO ---
   const isFinal = ["APROBADO", "RECHAZADO"].includes((estado || "").toUpperCase())
 
-  // ✅ APROBADO: escribe AO = "APROBADO" usando rechazoMotivo del back
+  // ✅ APROBADO: escribe AP = "APROBADO" usando rechazoMotivo del back
   const setEstadoSheet = async (nuevo: "APROBADO" | "RECHAZADO") => {
     if (!cliente?.id) return
     if (nuevo === "RECHAZADO") {
@@ -184,7 +184,7 @@ export function ClienteDetail({ cliente, onBack }: ClienteDetailProps) {
     setEstado(estadoPrevio)
   }
 
-  // ❌ RECHAZADO: exige motivo y escribe AO = motivo
+  // ❌ RECHAZADO: exige motivo y escribe AP = motivo
   const confirmarRechazo = async () => {
     const motivo = rechazoMotivo.trim()
     if (!motivo) {

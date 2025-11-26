@@ -47,6 +47,8 @@ export function ClientesTable({ clientes, onClienteSelect }: ClientesTableProps)
   const [comercial, setComercial] = useState<string>("")
   const [mes, setMes] = useState<string>("") // YYYY-MM
   const [localSel, setLocalSel] = useState<string>("") // lugar
+  const [personasDesde, setPersonasDesde] = useState<string>("") // cantidad personas desde
+  const [personasHasta, setPersonasHasta] = useState<string>("") // cantidad personas hasta
 
   // --- Opciones únicas para selects (derivadas de la primera carga) ---
   const opciones = useMemo(() => {
@@ -100,7 +102,12 @@ export function ClientesTable({ clientes, onClienteSelect }: ClientesTableProps)
       // 5) Local
       if (localSel && String(c.lugar || "") !== localSel) return false
 
-      // 6) Búsqueda global
+      // 6) Cantidad de personas (rango)
+      const cantPersonas = Number(c.cantidadPersonas) || 0
+      if (personasDesde && cantPersonas < Number(personasDesde)) return false
+      if (personasHasta && cantPersonas > Number(personasHasta)) return false
+
+      // 7) Búsqueda global
       if (searchTerm) {
         const needle = searchTerm.toLowerCase()
         const hay = Object.values(c).some((v) =>
@@ -111,7 +118,7 @@ export function ClientesTable({ clientes, onClienteSelect }: ClientesTableProps)
 
       return true
     })
-  }, [clientes, fechaDesde, fechaHasta, estado, comercial, mes, localSel, searchTerm])
+  }, [clientes, fechaDesde, fechaHasta, estado, comercial, mes, localSel, personasDesde, personasHasta, searchTerm])
 
   const orderedClientes = useMemo(
     () => [...filteredClientes].sort((a, b) => idToNumber(b.id) - idToNumber(a.id)),
@@ -135,8 +142,8 @@ export function ClientesTable({ clientes, onClienteSelect }: ClientesTableProps)
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Filtros: Fecha, Estado, Comercial, Mes, Local, Búsqueda */}
-      <div className="grid gap-3 md:grid-cols-6">
+      {/* Filtros: Fecha, Estado, Comercial, Mes, Local, Personas, Búsqueda */}
+      <div className="grid gap-3 md:grid-cols-4">
         {/* 1) Fecha (rango) */}
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground w-14">Desde</span>
@@ -214,6 +221,26 @@ export function ClientesTable({ clientes, onClienteSelect }: ClientesTableProps)
             ))}
           </select>
         </div>
+
+        {/* 6) Cantidad de personas (rango) */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground w-14">Personas</span>
+          <Input
+            type="number"
+            placeholder="Min"
+            value={personasDesde}
+            onChange={(e) => setPersonasDesde(e.target.value)}
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground w-14">a</span>
+          <Input
+            type="number"
+            placeholder="Max"
+            value={personasHasta}
+            onChange={(e) => setPersonasHasta(e.target.value)}
+          />
+        </div>
       </div>
 
       {/* Búsqueda global */}
@@ -278,6 +305,7 @@ export function ClientesTable({ clientes, onClienteSelect }: ClientesTableProps)
         {comercial && ` · Comercial: ${comercial}`}
         {mes && ` · Mes: ${mes}`}
         {localSel && ` · Local: ${localSel}`}
+        {(personasDesde || personasHasta) && ` · Personas: ${personasDesde || "—"} a ${personasHasta || "—"}`}
       </div>
     </div>
   )
